@@ -22,8 +22,8 @@ const GLOBAL_CSS = `
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const fmt = (n) => "$" + Math.round(n).toLocaleString();
-const fmtK = (n) => n >= 1000000 ? "$" + (n / 1000000).toFixed(1) + "M" : n >= 1000 ? "$" + (n / 1000).toFixed(0) + "K" : fmt(n);
+const fmt = (n) => { n = Number(n) || 0; return "$" + Math.round(n).toLocaleString(); };
+const fmtK = (n) => { n = Number(n) || 0; return n >= 1000000 ? "$" + (n / 1000000).toFixed(1) + "M" : n >= 1000 ? "$" + (n / 1000).toFixed(0) + "K" : fmt(n); };
 
 const STATUS = {
   green: { bg: "#dcfce7", text: "#166534", dot: "#22c55e", label: "Green" },
@@ -96,11 +96,11 @@ function PillChart({ data, colorMap }) {
 
 function BarChart({ data, labelKey, valueKey, maxVal, color = "#3b82f6", formatValue, limit = 12 }) {
   if (!data?.length) return <div style={{ color: "#9ca3af", padding: 12 }}>No data</div>;
-  const max = maxVal || Math.max(...data.map((d) => d[valueKey] || 0), 1);
+  const max = maxVal || Math.max(...data.map((d) => Number(d[valueKey]) || 0), 1);
   return (
     <div>
       {data.slice(0, limit).map((item, i) => {
-        const val = item[valueKey] || 0;
+        const val = Number(item[valueKey]) || 0;
         const pct = max > 0 ? (val / max) * 100 : 0;
         return (
           <div key={i} style={s.barRow}>
@@ -268,7 +268,7 @@ function ProjectTable({ projects }) {
                 <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{fmtK(p.budget_forecast)}</td>
                 <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12, color: p.actuals === null ? "#9ca3af" : "#1a1a2e" }}>{p.actuals === null ? "No Tracking" : fmtK(p.actuals)}</td>
                 <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12, color: p.is_overserviced ? "#ef4444" : p.overage === null ? "#9ca3af" : "#1a1a2e", fontWeight: p.is_overserviced ? 700 : 400 }}>{p.overage === null ? "No Tracking" : fmtK(p.overage)}</td>
-                <td style={s.td}>{p.percent_complete != null ? `${Math.round(p.percent_complete)}%` : "-"}</td>
+                <td style={s.td}>{p.percent_complete != null && !isNaN(p.percent_complete) ? `${Math.round(p.percent_complete)}%` : "-"}</td>
                 <td style={s.td}>{p.top_priority === "High" ? <span style={{ color: "#dc2626", fontWeight: 700, fontSize: 12 }}>HIGH</span> : <span style={{ fontSize: 12, color: "#9ca3af" }}>{p.top_priority}</span>}</td>
                 <td style={s.td}><span style={{ fontSize: 11 }}>{p.resource_status}</span></td>
               </tr>
@@ -470,6 +470,8 @@ export default function Dashboard() {
 
             <div style={s.footer}>
               Generated {new Date(d.generated_at).toLocaleString()} via Smartsheet API
+              <br />
+              v{process.env.BUILD_VERSION} | {process.env.BUILD_COMMIT} | Built {new Date(process.env.BUILD_TIME).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </div>
           </>
         )}

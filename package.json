@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "bump": "node bump.js patch",
+    "bump:patch": "node bump.js patch",
+    "bump:minor": "node bump.js minor",
+    "bump:major": "node bump.js major"
   },
   "dependencies": {
     "next": "^14.2.0",
