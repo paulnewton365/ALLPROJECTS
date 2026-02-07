@@ -30,7 +30,7 @@ async function listReports() {
 
 async function getSource(sourceId, sourceType = "sheet") {
   const endpoint = sourceType === "report"
-    ? `/reports/${sourceId}?pageSize=10000&include=sourceSheets`
+    ? `/reports/${sourceId}?pageSize=10000`
     : `/sheets/${sourceId}?pageSize=10000`;
   return apiRequest(endpoint);
 }
@@ -109,20 +109,6 @@ function classifyWorkflow(value) {
   return "other";
 }
 
-function classifyCategory(workflowStatus, sheetName) {
-  const wf = (workflowStatus || "").trim().toLowerCase();
-  const sn = (sheetName || "").trim().toLowerCase();
-  for (const [category, rules] of Object.entries(config.categories)) {
-    if (rules.workflowStatuses) {
-      if (rules.workflowStatuses.some((s) => s.toLowerCase() === wf)) return category;
-    }
-    if (rules.sheetNames) {
-      if (rules.sheetNames.some((s) => sn.includes(s.toLowerCase()))) return category;
-    }
-  }
-  return "Uncategorized";
-}
-
 function incrementMap(map, key, data) {
   if (!map[key]) map[key] = { budget: 0, actuals: 0, overage: 0, oop: 0, projects: 0, overserviced: 0, investment: 0, pipeline: 0 };
   map[key].budget += Number(data.budget) || 0;
@@ -156,12 +142,6 @@ async function fetchSnapshot() {
   const reverseMap = {};
   for (const [field, ssColName] of Object.entries(columnMapping)) reverseMap[ssColName] = field;
 
-  // Build sheetId -> sheetName map from sourceSheets (reports only)
-  const sheetIdMap = {};
-  for (const sheet of raw.sourceSheets || []) {
-    if (sheet.id && sheet.name) sheetIdMap[sheet.id] = sheet.name;
-  }
-
   // Extract all rows with all fields
   const projects = (raw.rows || []).map((row) => {
     const item = {};
@@ -173,8 +153,6 @@ async function fetchSnapshot() {
       const fieldName = reverseMap[ssColName] || ssColName;
       item[fieldName] = cell.displayValue || cell.value || null;
     }
-    // Reports include the source sheet name on each row (or we derive from sheetId)
-    item._sheetName = row.sheetName || sheetIdMap[row.sheetId] || "";
     return item;
   });
 
@@ -194,15 +172,8 @@ async function fetchSnapshot() {
   const pmMap = {};
   const ecosystemMap = {};
   const requestTypeMap = {};
-  const categoryMap = {};
 
-  // Filter out projects that don't match any defined category
-  const categorizedProjects = projects.filter((p) => {
-    const cat = classifyCategory(p.workflow_status, p._sheetName);
-    return cat !== "Uncategorized";
-  });
-
-  const projectTable = categorizedProjects.map((p) => {
+  const projectTable = projects.map((p) => {
     const budget = parseCurrency(p.budget_forecast);
     const actuals = parseCurrency(p.actuals);
     const oop = parseCurrency(p.oop);
@@ -265,10 +236,6 @@ async function fetchSnapshot() {
     const eco = p.ecosystem || "Unassigned";
     incrementMap(ecosystemMap, eco, aggData);
 
-    // Category classification (by workflow status or source sheet name)
-    const category = classifyCategory(p.workflow_status, p._sheetName);
-    incrementMap(categoryMap, category, aggData);
-
     // Request type can be comma-separated
     const types = (p.request_type || "Unassigned").split(",").map((t) => t.trim());
     for (const t of types) {
@@ -284,8 +251,6 @@ async function fetchSnapshot() {
       rag_color: statusColor,
       workflow_status: p.workflow_status || "-",
       workflow_phase: workflowPhase,
-      category,
-      source_sheet: p._sheetName || "-",
       project_manager: pm,
       budget_forecast: budget,
       actuals: actualsTracked ? actuals : null,
@@ -327,7 +292,7 @@ async function fetchSnapshot() {
   return {
     title: config.title,
     generated_at: new Date().toISOString(),
-    total_projects: categorizedProjects.length,
+    total_projects: projects.length,
 
     status: statusCounts,
     workflow: workflowCounts,
@@ -347,7 +312,7 @@ async function fetchSnapshot() {
       total_pipeline: safe(totalPipeline),
       total_monthly_budget: safe(totalMonthlyBudget),
       tracked_projects: safe(trackedCount),
-      untracked_projects: safe(categorizedProjects.length - trackedCount),
+      untracked_projects: safe(projects.length - trackedCount),
     },
 
     flags: {
@@ -358,8 +323,6 @@ async function fetchSnapshot() {
     by_client: toSortedArray(clientMap),
     by_pm: toSortedArray(pmMap, "projects"),
     by_ecosystem: toSortedArray(ecosystemMap),
-    by_category: toSortedArray(categoryMap, "projects"),
-    category_order: Object.keys(config.categories),
     by_request_type: Object.entries(requestTypeMap)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
