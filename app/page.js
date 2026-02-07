@@ -32,6 +32,17 @@ const STATUS = {
   unknown: { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af", label: "Unset" },
 };
 
+const CATEGORY_COLORS = {
+  "Internal Admin Time": { bg: "#f3f4f6", text: "#374151", accent: "#6b7280", icon: "⚙️" },
+  "Internal Approved Projects": { bg: "#ede9fe", text: "#5b21b6", accent: "#8b5cf6", icon: "🏢" },
+  "Active Live Projects": { bg: "#dbeafe", text: "#1e40af", accent: "#3b82f6", icon: "🚀" },
+  "Active Support": { bg: "#d1fae5", text: "#065f46", accent: "#10b981", icon: "🛟" },
+  "Active Web Warranty": { bg: "#fef3c7", text: "#92400e", accent: "#f59e0b", icon: "🌐" },
+  "New Business Qualification": { bg: "#fce7f3", text: "#9d174d", accent: "#ec4899", icon: "🎯" },
+  "New Business Pipeline": { bg: "#ffedd5", text: "#9a3412", accent: "#f97316", icon: "📊" },
+  "Uncategorized": { bg: "#f3f4f6", text: "#6b7280", accent: "#9ca3af", icon: "❓" },
+};
+
 // ---------------------------------------------------------------------------
 // Components
 // ---------------------------------------------------------------------------
@@ -153,24 +164,101 @@ function Tabs({ tabs, active, onChange }) {
 }
 
 // ---------------------------------------------------------------------------
+// Category Cards
+// ---------------------------------------------------------------------------
+
+function CategoryCards({ categories, categoryOrder, projects, onCategoryClick }) {
+  // Build a lookup from the by_category array
+  const catLookup = {};
+  for (const c of categories) catLookup[c.name] = c;
+
+  // Also count RAG status per category from projects
+  const catStatus = {};
+  for (const p of projects) {
+    const cat = p.category || "Uncategorized";
+    if (!catStatus[cat]) catStatus[cat] = { green: 0, yellow: 0, red: 0, unknown: 0 };
+    catStatus[cat][p.rag_color] = (catStatus[cat][p.rag_color] || 0) + 1;
+  }
+
+  const ordered = [...categoryOrder, "Uncategorized"].filter((name) => catLookup[name]);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 24 }}>
+      {ordered.map((name) => {
+        const cat = catLookup[name] || { projects: 0, budget: 0, actuals: 0, overage: 0, overserviced: 0, pipeline: 0 };
+        const theme = CATEGORY_COLORS[name] || CATEGORY_COLORS["Uncategorized"];
+        const rag = catStatus[name] || { green: 0, yellow: 0, red: 0, unknown: 0 };
+        const ragTotal = rag.green + rag.yellow + rag.red + rag.unknown;
+
+        return (
+          <div key={name} onClick={() => onCategoryClick?.(name)} style={{
+            background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+            borderLeft: `4px solid ${theme.accent}`, cursor: onCategoryClick ? "pointer" : "default",
+            transition: "transform 0.15s ease, box-shadow 0.15s ease",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.12)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)"; }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: theme.text, marginBottom: 2 }}>
+                  {theme.icon} {name}
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#1a1a2e" }}>{cat.projects}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>projects</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>{fmtK(cat.budget)}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>budget</div>
+              </div>
+            </div>
+
+            {/* Mini RAG bar */}
+            {ragTotal > 0 && (
+              <div style={{ display: "flex", height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 8, background: "#f0f2f5" }}>
+                {rag.green > 0 && <div style={{ width: `${(rag.green / ragTotal) * 100}%`, background: "#22c55e" }} />}
+                {rag.yellow > 0 && <div style={{ width: `${(rag.yellow / ragTotal) * 100}%`, background: "#eab308" }} />}
+                {rag.red > 0 && <div style={{ width: `${(rag.red / ragTotal) * 100}%`, background: "#ef4444" }} />}
+                {rag.unknown > 0 && <div style={{ width: `${(rag.unknown / ragTotal) * 100}%`, background: "#d1d5db" }} />}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#6b7280" }}>
+              <span>Actuals: <b style={{ color: "#1a1a2e" }}>{fmtK(cat.actuals)}</b></span>
+              {cat.overserviced > 0 && <span style={{ color: "#ef4444" }}>⚠ {cat.overserviced} over</span>}
+              {cat.pipeline > 0 && <span>Pipeline: <b>{fmtK(cat.pipeline)}</b></span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Project Table
 // ---------------------------------------------------------------------------
 
-function ProjectTable({ projects }) {
+function ProjectTable({ projects, initialCategory }) {
   const [search, setSearch] = useState("");
   const [ragFilter, setRagFilter] = useState("");
   const [wfFilter, setWfFilter] = useState("");
   const [ecoFilter, setEcoFilter] = useState("");
   const [pmFilter, setPmFilter] = useState("");
+  const [catFilter, setCatFilter] = useState(initialCategory || "");
   const [overOnly, setOverOnly] = useState(false);
   const [priorityOnly, setPriorityOnly] = useState(false);
   const [sortCol, setSortCol] = useState(null);
   const [sortAsc, setSortAsc] = useState(true);
 
+  // Sync external category filter
+  useEffect(() => { if (initialCategory !== undefined) setCatFilter(initialCategory); }, [initialCategory]);
+
   // Unique values for filters
   const wfOptions = useMemo(() => [...new Set(projects.map((p) => p.workflow_status))].sort(), [projects]);
   const ecoOptions = useMemo(() => [...new Set(projects.map((p) => p.ecosystem))].sort(), [projects]);
   const pmOptions = useMemo(() => [...new Set(projects.map((p) => p.project_manager))].sort(), [projects]);
+  const catOptions = useMemo(() => [...new Set(projects.map((p) => p.category))].sort(), [projects]);
 
   const filtered = useMemo(() => {
     let r = [...projects];
@@ -179,6 +267,7 @@ function ProjectTable({ projects }) {
     if (wfFilter) r = r.filter((p) => p.workflow_status === wfFilter);
     if (ecoFilter) r = r.filter((p) => p.ecosystem === ecoFilter);
     if (pmFilter) r = r.filter((p) => p.project_manager === pmFilter);
+    if (catFilter) r = r.filter((p) => p.category === catFilter);
     if (overOnly) r = r.filter((p) => p.is_overserviced);
     if (priorityOnly) r = r.filter((p) => p.top_priority === "High");
     if (sortCol) {
@@ -190,7 +279,7 @@ function ProjectTable({ projects }) {
       });
     }
     return r;
-  }, [projects, search, ragFilter, wfFilter, ecoFilter, pmFilter, overOnly, priorityOnly, sortCol, sortAsc]);
+  }, [projects, search, ragFilter, wfFilter, ecoFilter, pmFilter, catFilter, overOnly, priorityOnly, sortCol, sortAsc]);
 
   function handleSort(col) {
     if (sortCol === col) setSortAsc(!sortAsc);
@@ -201,6 +290,7 @@ function ProjectTable({ projects }) {
     { key: "rid", label: "RID", w: 80 },
     { key: "client_name", label: "Client", w: 120 },
     { key: "project_name", label: "Assignment", w: 200 },
+    { key: "category", label: "Category", w: 140 },
     { key: "workflow_status", label: "Workflow", w: 100 },
     { key: "rag", label: "RAG", w: 70 },
     { key: "work_progress", label: "Progress", w: 100 },
@@ -218,6 +308,10 @@ function ProjectTable({ projects }) {
     <>
       <div style={s.filterBar}>
         <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...s.filterInput, minWidth: 180 }} />
+        <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} style={{ ...s.filterInput, fontWeight: catFilter ? 600 : 400 }}>
+          <option value="">All Categories</option>
+          {catOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
         <select value={ragFilter} onChange={(e) => setRagFilter(e.target.value)} style={s.filterInput}>
           <option value="">All RAG</option>
           <option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option><option value="unknown">Unset</option>
@@ -255,11 +349,14 @@ function ProjectTable({ projects }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p, i) => (
+            {filtered.map((p, i) => {
+              const catTheme = CATEGORY_COLORS[p.category] || CATEGORY_COLORS["Uncategorized"];
+              return (
               <tr key={i} style={i % 2 ? { background: "#f8f9fa" } : {}}>
                 <td style={s.td}><span style={{ fontFamily: "monospace", fontSize: 12 }}>{p.rid}</span></td>
                 <td style={{ ...s.td, fontWeight: 600 }}>{p.client_name}</td>
                 <td style={s.td}>{p.project_name}</td>
+                <td style={s.td}><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: catTheme.bg, color: catTheme.text, fontWeight: 600, whiteSpace: "nowrap" }}>{p.category}</span></td>
                 <td style={s.td}><span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 6, background: p.workflow_phase === "active" ? "#dbeafe" : p.workflow_phase === "on_hold" ? "#fef3c7" : p.workflow_phase === "pipeline" ? "#e0e7ff" : "#f3f4f6", color: "#374151" }}>{p.workflow_status}</span></td>
                 <td style={s.td}><Badge color={p.rag_color} label={p.rag} /></td>
                 <td style={s.td}><span style={{ fontSize: 12 }}>{p.work_progress}</span></td>
@@ -272,7 +369,8 @@ function ProjectTable({ projects }) {
                 <td style={s.td}>{p.top_priority === "High" ? <span style={{ color: "#dc2626", fontWeight: 700, fontSize: 12 }}>HIGH</span> : <span style={{ fontSize: 12, color: "#9ca3af" }}>{p.top_priority}</span>}</td>
                 <td style={s.td}><span style={{ fontSize: 11 }}>{p.resource_status}</span></td>
               </tr>
-            ))}
+              );
+            })}
             {filtered.length === 0 && <tr><td colSpan={cols.length} style={{ ...s.td, textAlign: "center", color: "#9ca3af", padding: 40 }}>No matching projects</td></tr>}
           </tbody>
         </table>
@@ -290,6 +388,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
+  const [categoryFilter, setCategoryFilter] = useState("");
 
   async function loadData() {
     setLoading(true);
@@ -341,7 +440,7 @@ export default function Dashboard() {
                 { key: "projects", label: "All Projects" },
               ]}
               active={tab}
-              onChange={setTab}
+              onChange={(t) => { if (t !== "projects") setCategoryFilter(""); setTab(t); }}
             />
 
             {/* ============================================================= */}
@@ -349,6 +448,12 @@ export default function Dashboard() {
             {/* ============================================================= */}
             {tab === "overview" && (
               <>
+                <CategoryCards
+                  categories={d.by_category}
+                  categoryOrder={d.category_order || []}
+                  projects={d.projects}
+                  onCategoryClick={(name) => { setCategoryFilter(name); setTab("projects"); }}
+                />
                 <StatusBar status={d.status} />
 
                 <div className="kpi-grid" style={s.kpiGrid}>
@@ -464,7 +569,7 @@ export default function Dashboard() {
             {/* ============================================================= */}
             {tab === "projects" && (
               <Section>
-                <ProjectTable projects={d.projects} />
+                <ProjectTable projects={d.projects} initialCategory={categoryFilter} />
               </Section>
             )}
 
