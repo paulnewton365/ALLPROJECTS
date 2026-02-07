@@ -12,65 +12,64 @@ const GLOBAL_CSS = `
     background: #f0f2f5; color: #1a1a2e;
   }
   ::selection { background: #3b82f6; color: #fff; }
+  .treemap-cell:hover { filter: brightness(0.92); }
+  .bubble-cell:hover circle { stroke-width: 2; stroke: #1a1a2e; }
   @media (max-width: 768px) {
     .chart-row { grid-template-columns: 1fr !important; }
     .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
-    .split-view { grid-template-columns: 1fr !important; }
-    .filter-bar { flex-direction: column; }
+    .exec-kpi-strip { grid-template-columns: repeat(2, 1fr) !important; }
   }
 `;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const fmt = (n) => { n = Number(n) || 0; return "$" + Math.round(n).toLocaleString(); };
+const fmt = (n) => "$" + Math.round(Number(n) || 0).toLocaleString();
 const fmtK = (n) => { n = Number(n) || 0; return n >= 1000000 ? "$" + (n / 1000000).toFixed(1) + "M" : n >= 1000 ? "$" + (n / 1000).toFixed(0) + "K" : fmt(n); };
 const pct = (n) => n != null && !isNaN(n) ? `${Math.round(n)}%` : "-";
 
 const RAG = {
-  green: { bg: "#dcfce7", text: "#166534", dot: "#22c55e", label: "Green", desc: "On/under budget" },
-  yellow: { bg: "#fef9c3", text: "#854d0e", dot: "#eab308", label: "Yellow", desc: "<10% over" },
-  red: { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", label: "Red", desc: ">10% over" },
-  blue: { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "Blue", desc: "Underservice" },
+  green: { bg: "#dcfce7", text: "#166534", dot: "#22c55e", label: "Green" },
+  yellow: { bg: "#fef9c3", text: "#854d0e", dot: "#eab308", label: "Yellow" },
+  red: { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", label: "Red" },
+  blue: { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "Blue" },
   unknown: { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af", label: "Unset" },
 };
 
+const ECO_COLORS = ["#3b82f6", "#8b5cf6", "#ec4899", "#f97316", "#10b981", "#14b8a6", "#ef4444", "#eab308"];
+const STAGE_COLORS = {
+  "IN REVIEW": "#a78bfa", "Proposal": "#818cf8", "Waiting For Response": "#60a5fa",
+  "Working On Contract": "#34d399", "On Hold": "#9ca3af",
+};
+const STAGE_ORDER = ["IN REVIEW", "Proposal", "Waiting For Response", "Working On Contract", "On Hold"];
+
 const CATEGORY_COLORS = {
-  "Internal Admin Time": "#6b7280",
-  "Internal Approved Projects": "#8b5cf6",
-  "Active Live Projects": "#3b82f6",
-  "Active Support": "#10b981",
-  "Active Web Warranty": "#f59e0b",
-  "New Business Qualification": "#ec4899",
+  "Internal Admin Time": "#6b7280", "Internal Approved Projects": "#8b5cf6",
+  "Active Live Projects": "#3b82f6", "Active Support": "#10b981",
+  "Active Web Warranty": "#f59e0b", "New Business Qualification": "#ec4899",
   "New Business Pipeline": "#f97316",
 };
 
-const STAGE_COLORS = {
-  "IN REVIEW": "#a78bfa",
-  "Proposal": "#818cf8",
-  "Waiting For Response": "#60a5fa",
-  "Working On Contract": "#34d399",
-  "On Hold": "#9ca3af",
-};
-
-// ---------------------------------------------------------------------------
-// Shared Components
-// ---------------------------------------------------------------------------
-
-function KPI({ label, value, detail, color, small }) {
-  return (
-    <div style={s.kpiCard}>
-      <div style={s.kpiLabel}>{label}</div>
-      <div style={{ ...s.kpiValue, color: color || "#1a1a2e", fontSize: small ? 22 : 28 }}>{value}</div>
-      {detail && <div style={s.kpiDetail}>{detail}</div>}
-    </div>
-  );
+// Burn rate -> color gradient (green to amber to red)
+function burnColor(rate) {
+  if (rate <= 50) return "#22c55e";
+  if (rate <= 70) return "#84cc16";
+  if (rate <= 85) return "#eab308";
+  if (rate <= 95) return "#f97316";
+  return "#ef4444";
 }
 
-function Section({ title, children, style: sx }) {
+// ---------------------------------------------------------------------------
+// Shared UI Components
+// ---------------------------------------------------------------------------
+
+function Section({ title, subtitle, children, style: sx }) {
   return (
     <div style={{ ...s.section, ...sx }}>
-      {title && <h2 style={s.sectionTitle}>{title}</h2>}
+      {title && <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
+        <h2 style={s.sectionTitle}>{title}</h2>
+        {subtitle && <span style={{ fontSize: 11, color: "#9ca3af" }}>{subtitle}</span>}
+      </div>}
       {children}
     </div>
   );
@@ -83,7 +82,7 @@ function Badge({ color, label }) {
 
 function Tabs({ tabs, active, onChange }) {
   return (
-    <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "2px solid #e5e7eb", paddingBottom: 0 }}>
+    <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "2px solid #e5e7eb" }}>
       {tabs.map((t) => (
         <button key={t.key} onClick={() => onChange(t.key)} style={{
           padding: "10px 20px", border: "none", background: "transparent", cursor: "pointer",
@@ -118,6 +117,301 @@ function RAGBar({ status }) {
   );
 }
 
+function KPI({ label, value, detail, color, small }) {
+  return (
+    <div style={s.kpiCard}>
+      <div style={s.kpiLabel}>{label}</div>
+      <div style={{ ...s.kpiValue, color: color || "#1a1a2e", fontSize: small ? 22 : 28 }}>{value}</div>
+      {detail && <div style={s.kpiDetail}>{detail}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 1. EXECUTIVE KPI STRIP
+// ---------------------------------------------------------------------------
+function ExecKPIStrip({ live, newbiz }) {
+  const netOverservice = live.financials.total_overage - live.financials.total_investment;
+  return (
+    <div className="exec-kpi-strip" style={{
+      display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 24,
+    }}>
+      <div style={s.execKpi}>
+        <div style={s.execLabel}>Live Revenue</div>
+        <div style={{ ...s.execValue, color: "#3b82f6" }}>{fmtK(live.financials.total_budget)}</div>
+        <div style={s.execSub}>{live.count} projects</div>
+      </div>
+      <div style={s.execKpi}>
+        <div style={s.execLabel}>Burn Rate</div>
+        <div style={{ ...s.execValue, color: burnColor(live.financials.burn_rate_pct) }}>{live.financials.burn_rate_pct}%</div>
+        <div style={s.execSub}>{fmtK(live.financials.total_actuals)} spent</div>
+      </div>
+      <div style={s.execKpi}>
+        <div style={s.execLabel}>Net Overservice</div>
+        <div style={{ ...s.execValue, color: netOverservice > 0 ? "#ef4444" : "#22c55e" }}>{fmtK(netOverservice)}</div>
+        <div style={s.execSub}>{live.financials.overserviced_count} projects ({fmtK(live.financials.total_investment)} invested)</div>
+      </div>
+      <div style={s.execKpi}>
+        <div style={s.execLabel}>Weighted Pipeline</div>
+        <div style={{ ...s.execValue, color: "#f97316" }}>{fmtK(newbiz.weighted_pipeline)}</div>
+        <div style={s.execSub}>{fmtK(newbiz.total_forecast)} unweighted</div>
+      </div>
+      <div style={s.execKpi}>
+        <div style={s.execLabel}>Near Close</div>
+        <div style={{ ...s.execValue, color: "#22c55e" }}>{fmtK(newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract")?.forecast || 0)}</div>
+        <div style={s.execSub}>{newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract")?.count || 0} deals working on contract</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 2. TREEMAP — Revenue by Ecosystem
+// ---------------------------------------------------------------------------
+function EcosystemTreemap({ ecosystems }) {
+  if (!ecosystems?.length) return null;
+  const total = ecosystems.reduce((a, e) => a + e.budget, 0) || 1;
+  // Layout: simple squarified rows
+  const rows = [];
+  let currentRow = [];
+  let rowBudget = 0;
+  const targetRowBudget = total / Math.ceil(Math.sqrt(ecosystems.length));
+
+  for (const eco of ecosystems) {
+    currentRow.push(eco);
+    rowBudget += eco.budget;
+    if (rowBudget >= targetRowBudget) {
+      rows.push({ items: currentRow, budget: rowBudget });
+      currentRow = [];
+      rowBudget = 0;
+    }
+  }
+  if (currentRow.length) rows.push({ items: currentRow, budget: rowBudget });
+
+  return (
+    <div style={{ minHeight: 220 }}>
+      {rows.map((row, ri) => {
+        const rowPct = (row.budget / total) * 100;
+        return (
+          <div key={ri} style={{ display: "flex", height: `${Math.max(rowPct * 2.2, 50)}px`, marginBottom: 2 }}>
+            {row.items.map((eco, ci) => {
+              const cellPct = row.budget > 0 ? (eco.budget / row.budget) * 100 : 100 / row.items.length;
+              const bg = burnColor(eco.burn_rate);
+              const ragCounts = eco.rag || {};
+              const redYellow = (ragCounts.red || 0) + (ragCounts.yellow || 0);
+              return (
+                <div className="treemap-cell" key={ci} title={`${eco.name}\nBudget: ${fmt(eco.budget)}\nActuals: ${fmt(eco.actuals)}\nBurn: ${eco.burn_rate}%\nOverage: ${fmt(eco.overage)}\n${eco.projects} projects`} style={{
+                  width: `${cellPct}%`, marginRight: 2, borderRadius: 8,
+                  background: `linear-gradient(135deg, ${bg}dd, ${bg}99)`,
+                  padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "space-between",
+                  cursor: "default", transition: "filter 0.15s", overflow: "hidden",
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{eco.name}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>{fmtK(eco.budget)}</div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>{eco.burn_rate}% burn</div>
+                    <div style={{ display: "flex", gap: 3 }}>
+                      {eco.projects > 0 && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.8)" }}>{eco.projects}p</span>}
+                      {redYellow > 0 && <span style={{ fontSize: 10, background: "rgba(239,68,68,0.7)", color: "#fff", borderRadius: 4, padding: "1px 4px" }}>⚠{redYellow}</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+      <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 10, color: "#6b7280" }}>
+        <span>Cell size = budget share</span>
+        <span>Color = burn rate:</span>
+        {[["≤50%", "#22c55e"], ["≤70%", "#84cc16"], ["≤85%", "#eab308"], ["≤95%", "#f97316"], [">95%", "#ef4444"]].map(([l, c]) => (
+          <span key={l} style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: c, display: "inline-block" }} />{l}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 3. STACKED PIPELINE — Weighted pipeline by Ecosystem × Stage
+// ---------------------------------------------------------------------------
+function StackedPipeline({ pipelineByEcosystem }) {
+  if (!pipelineByEcosystem?.length) return <div style={{ color: "#9ca3af", padding: 20 }}>No pipeline data</div>;
+  const maxWeighted = Math.max(...pipelineByEcosystem.map((e) => e.total_weighted), 1);
+
+  return (
+    <div>
+      {pipelineByEcosystem.map((eco, i) => (
+        <div key={eco.ecosystem} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 120, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={eco.ecosystem}>{eco.ecosystem}</div>
+          <div style={{ flex: 1, height: 32, background: "#f0f2f5", borderRadius: 6, overflow: "hidden", display: "flex" }}>
+            {eco.stages.filter((st) => st.weighted > 0).map((st) => {
+              const w = (st.weighted / maxWeighted) * 100;
+              return (
+                <div key={st.stage} title={`${st.stage}: ${st.count} deals, ${fmtK(st.weighted)} weighted`} style={{
+                  width: `${w}%`, background: STAGE_COLORS[st.stage] || "#9ca3af",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 10, fontWeight: 600, color: "#fff", minWidth: st.weighted > 0 ? 4 : 0,
+                  borderRight: "1px solid rgba(255,255,255,0.3)",
+                }}>
+                  {w > 8 ? st.count : ""}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ textAlign: "right", minWidth: 80 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{fmtK(eco.total_weighted)}</div>
+            <div style={{ fontSize: 10, color: "#6b7280" }}>{fmtK(eco.total_forecast)} fcst</div>
+          </div>
+        </div>
+      ))}
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 10, color: "#6b7280", flexWrap: "wrap" }}>
+        {STAGE_ORDER.map((stage) => (
+          <span key={stage} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: STAGE_COLORS[stage] }} />{stage}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 4. DIVERGING BAR — Overservice by Ecosystem
+// ---------------------------------------------------------------------------
+function DivergingOverservice({ ecosystems }) {
+  if (!ecosystems?.length) return null;
+  const data = ecosystems.filter((e) => e.overage !== 0 || e.investment > 0).sort((a, b) => b.overage - a.overage);
+  if (!data.length) return <div style={{ color: "#9ca3af", padding: 20 }}>No overservice data</div>;
+  const maxAbs = Math.max(...data.map((e) => Math.max(Math.abs(e.overage), Math.abs(e.overage - e.investment))), 1);
+  const midX = 50; // percentage of container width for the zero line
+
+  return (
+    <div>
+      {data.map((eco) => {
+        const overPct = (eco.overage / maxAbs) * 45;
+        const netOverservice = eco.overage - eco.investment;
+        const investPct = eco.investment > 0 ? (eco.investment / maxAbs) * 45 : 0;
+        const isOver = eco.overage > 0;
+
+        return (
+          <div key={eco.name} style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ width: 120, fontSize: 12, fontWeight: 600, textAlign: "right", paddingRight: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={eco.name}>{eco.name}</div>
+            <div style={{ flex: 1, height: 28, position: "relative" }}>
+              {/* Zero line */}
+              <div style={{ position: "absolute", left: `${midX}%`, top: 0, bottom: 0, width: 1, background: "#374151", zIndex: 2 }} />
+              {/* Bar */}
+              {isOver ? (
+                <>
+                  <div title={`Overage: ${fmt(eco.overage)}`} style={{
+                    position: "absolute", left: `${midX}%`, top: 2, bottom: 2, borderRadius: "0 4px 4px 0",
+                    width: `${Math.min(Math.abs(overPct), 48)}%`, background: "#ef4444",
+                  }} />
+                  {eco.investment > 0 && (
+                    <div title={`Investment offset: ${fmt(eco.investment)}`} style={{
+                      position: "absolute", left: `${midX + Math.abs(overPct) - investPct}%`, top: 0, bottom: 0,
+                      width: `${investPct}%`, borderRight: "2px dashed #22c55e", zIndex: 3,
+                    }} />
+                  )}
+                </>
+              ) : (
+                <div title={`Underage: ${fmt(Math.abs(eco.overage))}`} style={{
+                  position: "absolute", right: `${100 - midX}%`, top: 2, bottom: 2, borderRadius: "4px 0 0 4px",
+                  width: `${Math.min(Math.abs(overPct), 48)}%`, background: "#22c55e",
+                }} />
+              )}
+            </div>
+            <div style={{ minWidth: 100, textAlign: "right" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: eco.overage > 0 ? "#ef4444" : "#22c55e" }}>{fmtK(eco.overage)}</span>
+              {eco.investment > 0 && (
+                <span style={{ fontSize: 10, color: "#6b7280", marginLeft: 4 }}>({fmtK(eco.investment)} inv)</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 10, color: "#6b7280" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#ef4444" }} />Overservice (FTC)</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#22c55e" }} />Underage</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 0, borderTop: "2px dashed #22c55e" }} />Investment offset</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 5. BUBBLE MATRIX — Ecosystem × Request Type
+// ---------------------------------------------------------------------------
+function BubbleMatrix({ matrix }) {
+  if (!matrix || !matrix.ecosystems?.length || !matrix.requestTypes?.length) return <div style={{ color: "#9ca3af", padding: 20 }}>No data</div>;
+  
+  // Find max for sizing
+  const allCounts = matrix.cells.flat().map((c) => c.count);
+  const maxCount = Math.max(...allCounts, 1);
+  const allBudgets = matrix.cells.flat().map((c) => c.budget);
+  const maxBudget = Math.max(...allBudgets, 1);
+
+  // Limit display to top request types by total count
+  const rtTotals = matrix.requestTypes.map((rt, ci) => ({
+    name: rt, idx: ci,
+    total: matrix.cells.reduce((sum, row) => sum + row[ci].count, 0),
+  })).sort((a, b) => b.total - a.total);
+  const topRT = rtTotals.slice(0, 10);
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead>
+          <tr>
+            <th style={{ ...s.matrixTh, width: 120, textAlign: "left" }}>Ecosystem</th>
+            {topRT.map((rt) => (
+              <th key={rt.name} style={{ ...s.matrixTh, maxWidth: 80 }} title={rt.name}>
+                <div style={{ transform: "rotate(-45deg)", transformOrigin: "left bottom", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600 }}>{rt.name.length > 14 ? rt.name.slice(0, 12) + "…" : rt.name}</div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {matrix.ecosystems.map((eco, ri) => (
+            <tr key={eco}>
+              <td style={{ padding: "6px 8px", fontSize: 12, fontWeight: 600, borderBottom: "1px solid #f0f2f5" }}>{eco}</td>
+              {topRT.map((rt) => {
+                const cell = matrix.cells[ri][rt.idx];
+                if (!cell || cell.count === 0) return <td key={rt.name} style={{ padding: 4, textAlign: "center", borderBottom: "1px solid #f0f2f5" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#e5e7eb", margin: "0 auto" }} />
+                </td>;
+                const radius = 6 + (cell.count / maxCount) * 18;
+                const opacity = 0.3 + (cell.budget / maxBudget) * 0.7;
+                return (
+                  <td key={rt.name} className="bubble-cell" style={{ padding: 4, textAlign: "center", borderBottom: "1px solid #f0f2f5" }}>
+                    <svg width={radius * 2 + 4} height={radius * 2 + 4} style={{ display: "block", margin: "0 auto" }}>
+                      <circle cx={radius + 2} cy={radius + 2} r={radius} fill={ECO_COLORS[ri % ECO_COLORS.length]} fillOpacity={opacity} />
+                      {cell.count > 1 && <text x={radius + 2} y={radius + 6} textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">{cell.count}</text>}
+                    </svg>
+                    <div style={{ fontSize: 9, color: "#6b7280", marginTop: 1 }}>{fmtK(cell.budget)}</div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 10, color: "#6b7280" }}>
+        <span>Circle size = project count</span>
+        <span>Opacity = budget concentration</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reusable BarChart
+// ---------------------------------------------------------------------------
 function BarChart({ data, labelKey, valueKey, maxVal, color = "#3b82f6", formatValue, limit = 12 }) {
   if (!data?.length) return <div style={{ color: "#9ca3af", padding: 12 }}>No data</div>;
   const sliced = data.slice(0, limit);
@@ -167,9 +461,6 @@ function PillChart({ data, colorMap }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Pipeline Funnel Component
-// ---------------------------------------------------------------------------
 function PipelineFunnel({ funnel }) {
   const maxCount = Math.max(...funnel.map((s) => s.count), 1);
   return (
@@ -177,11 +468,9 @@ function PipelineFunnel({ funnel }) {
       {funnel.map((stage) => (
         <div key={stage.stage} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "8px 0" }}>
           <div style={{ width: 150, fontSize: 12, fontWeight: 600, color: STAGE_COLORS[stage.stage] || "#6b7280" }}>{stage.stage}</div>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, height: 28, background: "#f0f2f5", borderRadius: 6, overflow: "hidden" }}>
-              <div style={{ height: "100%", borderRadius: 6, width: `${(stage.count / maxCount) * 100}%`, background: STAGE_COLORS[stage.stage] || "#9ca3af", display: "flex", alignItems: "center", paddingLeft: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{stage.count}</span>
-              </div>
+          <div style={{ flex: 1, height: 28, background: "#f0f2f5", borderRadius: 6, overflow: "hidden" }}>
+            <div style={{ height: "100%", borderRadius: 6, width: `${(stage.count / maxCount) * 100}%`, background: STAGE_COLORS[stage.stage] || "#9ca3af", display: "flex", alignItems: "center", paddingLeft: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{stage.count}</span>
             </div>
           </div>
           <div style={{ textAlign: "right", minWidth: 100 }}>
@@ -275,7 +564,7 @@ function DataTable({ data, columns, emptyMsg = "No projects" }) {
 }
 
 // ---------------------------------------------------------------------------
-// Column Definitions
+// Column definitions
 // ---------------------------------------------------------------------------
 const liveCols = [
   { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
@@ -311,7 +600,7 @@ const newbizCols = [
 ];
 
 // ---------------------------------------------------------------------------
-// Main Dashboard
+// MAIN DASHBOARD
 // ---------------------------------------------------------------------------
 
 export default function Dashboard() {
@@ -333,140 +622,108 @@ export default function Dashboard() {
   }
 
   useEffect(() => { loadData(); }, []);
-
   const d = data;
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
       <div style={s.container}>
-        {/* Header */}
         <div style={s.header}>
           <h1 style={s.title}>{d?.title || "Project Snapshot Dashboard"}</h1>
           <div style={s.subtitle}>
             <span>{d ? `${d.total_projects} active projects` : ""}</span>
-            <button onClick={loadData} disabled={loading} style={s.refreshBtn}>
-              {loading ? "Loading..." : "↻ Refresh"}
-            </button>
+            <button onClick={loadData} disabled={loading} style={s.refreshBtn}>{loading ? "Loading..." : "↻ Refresh"}</button>
           </div>
         </div>
 
-        {error && (
-          <div style={s.errorBox}>
-            <strong>Error:</strong> {error}
-            <div style={{ marginTop: 8, fontSize: 13 }}>Check environment variables. Hit <code>/api/discover</code> to debug.</div>
-          </div>
-        )}
+        {error && <div style={s.errorBox}><strong>Error:</strong> {error}</div>}
 
         {d && (
           <>
-            <Tabs
-              tabs={[
-                { key: "overview", label: "Overview" },
-                { key: "live", label: "Live Work", count: d.live.count },
-                { key: "newbiz", label: "New Business", count: d.newbiz.count },
-                { key: "projects", label: "All Projects" },
-              ]}
-              active={tab}
-              onChange={setTab}
-            />
+            <Tabs tabs={[
+              { key: "overview", label: "Executive Overview" },
+              { key: "live", label: "Live Work", count: d.live.count },
+              { key: "newbiz", label: "New Business", count: d.newbiz.count },
+              { key: "projects", label: "All Projects" },
+            ]} active={tab} onChange={setTab} />
 
-            {/* ============================================================= */}
-            {/* OVERVIEW TAB */}
-            {/* ============================================================= */}
+            {/* ============================================================ */}
+            {/* EXECUTIVE OVERVIEW TAB */}
+            {/* ============================================================ */}
             {tab === "overview" && (
-              <div className="split-view" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-                {/* --- LIVE WORK PANEL --- */}
-                <Section title="Live Work" style={{ borderTop: "4px solid #3b82f6" }}>
-                  <div style={{ fontSize: 36, fontWeight: 700, marginBottom: 4 }}>{d.live.count}</div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>active projects</div>
+              <>
+                <ExecKPIStrip live={d.live} newbiz={d.newbiz} />
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                    <div style={s.miniKpi}><div style={s.miniLabel}>Total Budget</div><div style={s.miniValue}>{fmtK(d.live.financials.total_budget)}</div></div>
-                    <div style={s.miniKpi}><div style={s.miniLabel}>Actuals</div><div style={s.miniValue}>{fmtK(d.live.financials.total_actuals)}</div></div>
-                    <div style={s.miniKpi}><div style={s.miniLabel}>Burn Rate</div><div style={s.miniValue}>{d.live.financials.burn_rate_pct}%</div></div>
-                    <div style={s.miniKpi}><div style={s.miniLabel}>Forecast Overage</div><div style={{ ...s.miniValue, color: d.live.financials.total_overage > 0 ? "#ef4444" : "#22c55e" }}>{fmtK(d.live.financials.total_overage)}</div></div>
-                  </div>
+                <div className="chart-row" style={s.chartRow}>
+                  <Section title="Revenue by Ecosystem" subtitle="Size = budget share · Color = burn rate">
+                    <EcosystemTreemap ecosystems={d.live.by_ecosystem} />
+                  </Section>
+                  <Section title="Overservice Exposure by Ecosystem" subtitle="Forecast to complete · Dashed line = approved investment">
+                    <DivergingOverservice ecosystems={d.live.by_ecosystem} />
+                  </Section>
+                </div>
 
-                  {/* RAG mini */}
-                  <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-                    {["green", "yellow", "red", "blue"].map((k) => d.live.status[k] > 0 && (
-                      <div key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: RAG[k].dot }} />
-                        <span style={{ fontWeight: 600 }}>{d.live.status[k]}</span>
-                        <span style={{ color: "#6b7280" }}>{RAG[k].label}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="chart-row" style={s.chartRow}>
+                  <Section title="Weighted Pipeline by Ecosystem" subtitle="Stacked by stage · Values = win-probability weighted">
+                    <StackedPipeline pipelineByEcosystem={d.newbiz.pipeline_by_ecosystem} />
+                  </Section>
+                  <Section title="Service Mix by Ecosystem" subtitle="Size = project count · Opacity = budget concentration">
+                    <BubbleMatrix matrix={d.live.ecosystem_request_type} />
+                  </Section>
+                </div>
 
-                  {/* Flags */}
-                  <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
-                    {d.live.flags.top_priority > 0 && <span>⚑ <b>{d.live.flags.top_priority}</b> top priority</span>}
-                    {d.live.financials.overserviced_count > 0 && <span style={{ color: "#ef4444" }}>⚠ <b>{d.live.financials.overserviced_count}</b> overserviced ({fmtK(d.live.financials.overserviced_amount)})</span>}
-                    {d.live.financials.missing_time_total > 0 && <span style={{ color: "#f59e0b" }}>⏱ <b>{fmtK(d.live.financials.missing_time_total)}</b> missing time</span>}
-                  </div>
-
-                  <div style={{ marginTop: 16, textAlign: "center" }}>
-                    <button onClick={() => setTab("live")} style={{ ...s.refreshBtn, background: "#3b82f6" }}>View Live Work →</button>
-                  </div>
-                </Section>
-
-                {/* --- NEW BUSINESS PANEL --- */}
-                <Section title="New Business" style={{ borderTop: "4px solid #f97316" }}>
-                  <div style={{ fontSize: 36, fontWeight: 700, marginBottom: 4 }}>{d.newbiz.count}</div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>opportunities in pipeline</div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                    <div style={s.miniKpi}><div style={s.miniLabel}>Total Forecast</div><div style={s.miniValue}>{fmtK(d.newbiz.total_forecast)}</div></div>
-                    <div style={s.miniKpi}><div style={s.miniLabel}>Weighted Pipeline</div><div style={{ ...s.miniValue, color: "#f97316" }}>{fmtK(d.newbiz.weighted_pipeline)}</div></div>
-                  </div>
-
-                  {/* Mini funnel */}
-                  <div style={{ marginBottom: 12 }}>
-                    {d.newbiz.pipeline_funnel.filter((s) => s.count > 0).map((stage) => (
-                      <div key={stage.stage} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <div style={{ width: 130, fontSize: 11, fontWeight: 600, color: STAGE_COLORS[stage.stage] || "#6b7280" }}>{stage.stage}</div>
-                        <div style={{ fontWeight: 700, fontSize: 14, minWidth: 24 }}>{stage.count}</div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>{fmtK(stage.forecast)}</div>
-                        <div style={{ fontSize: 11, color: "#9ca3af" }}>({fmtK(stage.weighted)} wtd)</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Recommendation split */}
-                  {Object.keys(d.newbiz.by_recommendation).length > 0 && (
-                    <div style={{ display: "flex", gap: 12, fontSize: 12, marginBottom: 8 }}>
-                      {Object.entries(d.newbiz.by_recommendation).map(([k, v]) => (
-                        <span key={k} style={{ color: k === "PROCEED" ? "#22c55e" : k === "DECLINE" ? "#ef4444" : "#6b7280" }}>
-                          <b>{v}</b> {k}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: 16, textAlign: "center" }}>
-                    <button onClick={() => setTab("newbiz")} style={{ ...s.refreshBtn, background: "#f97316" }}>View Pipeline →</button>
-                  </div>
-                </Section>
-              </div>
+                {/* Quick-look tables for top priority and red/yellow projects */}
+                <div className="chart-row" style={s.chartRow}>
+                  <Section title="Top Priority Projects">
+                    {(() => {
+                      const tp = d.live.projects.filter((p) => p.top_priority);
+                      if (!tp.length) return <div style={{ color: "#9ca3af", padding: 12 }}>No top priority projects flagged</div>;
+                      return tp.map((p) => (
+                        <div key={p.rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 12 }}>
+                          <span style={{ color: "#dc2626", fontWeight: 700 }}>★</span>
+                          <span style={{ fontFamily: "monospace", color: "#6b7280" }}>{p.rid}</span>
+                          <span style={{ fontWeight: 600 }}>{p.client_name}</span>
+                          <span style={{ flex: 1, color: "#374151" }}>{p.project_name}</span>
+                          <Badge color={p.rag_color} label={p.rag} />
+                          <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{fmtK(p.budget_forecast)}</span>
+                        </div>
+                      ));
+                    })()}
+                  </Section>
+                  <Section title="At Risk Projects" subtitle="Red + Yellow RAG">
+                    {(() => {
+                      const atRisk = d.live.projects.filter((p) => p.rag_color === "red" || p.rag_color === "yellow").sort((a, b) => (b.overage || 0) - (a.overage || 0));
+                      if (!atRisk.length) return <div style={{ color: "#22c55e", padding: 12 }}>✓ No at-risk projects</div>;
+                      return atRisk.slice(0, 10).map((p) => (
+                        <div key={p.rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 12 }}>
+                          <Badge color={p.rag_color} label={p.rag} />
+                          <span style={{ fontFamily: "monospace", color: "#6b7280" }}>{p.rid}</span>
+                          <span style={{ fontWeight: 600 }}>{p.client_name}</span>
+                          <span style={{ flex: 1, color: "#374151" }}>{p.project_name}</span>
+                          <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#ef4444" }}>{p.overage != null ? fmtK(p.overage) : "-"}</span>
+                        </div>
+                      ));
+                    })()}
+                  </Section>
+                </div>
+              </>
             )}
 
-            {/* ============================================================= */}
+            {/* ============================================================ */}
             {/* LIVE WORK TAB */}
-            {/* ============================================================= */}
+            {/* ============================================================ */}
             {tab === "live" && (
               <>
                 <RAGBar status={d.live.status} />
-
                 <div className="kpi-grid" style={s.kpiGrid}>
                   <KPI label="Total Budget" value={fmtK(d.live.financials.total_budget)} />
                   <KPI label="Actuals" value={fmtK(d.live.financials.total_actuals)} detail={`${d.live.financials.tracked_projects} tracked`} />
-                  <KPI label="Burn Rate" value={`${d.live.financials.burn_rate_pct}%`} detail="Actuals / Budget" />
-                  <KPI label="Forecast Overage" value={fmtK(d.live.financials.total_overage)} color={d.live.financials.total_overage > 0 ? "#ef4444" : "#22c55e"} detail="Forecast to complete" />
+                  <KPI label="Burn Rate" value={`${d.live.financials.burn_rate_pct}%`} />
+                  <KPI label="Forecast Overage" value={fmtK(d.live.financials.total_overage)} color={d.live.financials.total_overage > 0 ? "#ef4444" : "#22c55e"} />
                   <KPI label="OOP" value={fmtK(d.live.financials.total_oop)} />
                   <KPI label="Overserviced" value={d.live.financials.overserviced_count} detail={fmtK(d.live.financials.overserviced_amount)} color={d.live.financials.overserviced_count > 0 ? "#ef4444" : "#22c55e"} />
-                  <KPI label="Investment" value={fmtK(d.live.financials.total_investment)} detail="Approved total" />
-                  <KPI label="Missing Time" value={fmtK(d.live.financials.missing_time_total)} color={d.live.financials.missing_time_total > 5000 ? "#f59e0b" : "#22c55e"} detail="Pending approvals" />
+                  <KPI label="Investment" value={fmtK(d.live.financials.total_investment)} />
+                  <KPI label="Missing Time" value={fmtK(d.live.financials.missing_time_total)} color={d.live.financials.missing_time_total > 5000 ? "#f59e0b" : "#22c55e"} />
                 </div>
 
                 <div className="chart-row" style={s.chartRow}>
@@ -502,24 +759,24 @@ export default function Dashboard() {
               </>
             )}
 
-            {/* ============================================================= */}
+            {/* ============================================================ */}
             {/* NEW BUSINESS TAB */}
-            {/* ============================================================= */}
+            {/* ============================================================ */}
             {tab === "newbiz" && (
               <>
                 <div className="kpi-grid" style={s.kpiGrid}>
                   <KPI label="Opportunities" value={d.newbiz.count} />
-                  <KPI label="Total Forecast" value={fmtK(d.newbiz.total_forecast)} detail="Unweighted value" />
-                  <KPI label="Weighted Pipeline" value={fmtK(d.newbiz.weighted_pipeline)} color="#f97316" detail="Win-probability adjusted" />
-                  <KPI label="Working On Contract" value={fmtK(d.newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract")?.forecast || 0)} detail={`${d.newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract")?.count || 0} deals near close`} color="#22c55e" />
+                  <KPI label="Total Forecast" value={fmtK(d.newbiz.total_forecast)} detail="Unweighted" />
+                  <KPI label="Weighted Pipeline" value={fmtK(d.newbiz.weighted_pipeline)} color="#f97316" />
+                  <KPI label="Near Close" value={fmtK(d.newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract")?.forecast || 0)} detail={`${d.newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract")?.count || 0} deals`} color="#22c55e" />
                 </div>
 
                 <div className="chart-row" style={s.chartRow}>
                   <Section title="Pipeline by Stage">
                     <PipelineFunnel funnel={d.newbiz.pipeline_funnel} />
                   </Section>
-                  <Section title="Forecast by Ecosystem">
-                    <BarChart data={d.newbiz.by_ecosystem} labelKey="name" valueKey="forecast" color="#f97316" formatValue={fmtK} />
+                  <Section title="Weighted Pipeline by Ecosystem">
+                    <StackedPipeline pipelineByEcosystem={d.newbiz.pipeline_by_ecosystem} />
                   </Section>
                 </div>
 
@@ -527,7 +784,7 @@ export default function Dashboard() {
                   <Section title="Qualification Recommendation">
                     <div style={{ display: "flex", gap: 20 }}>
                       {Object.entries(d.newbiz.by_recommendation).sort((a,b) => b[1] - a[1]).map(([key, count]) => (
-                        <div key={key} style={{ textAlign: "center", padding: "12px 24px", borderRadius: 8, background: key === "PROCEED" ? "#dcfce7" : key === "DECLINE" ? "#fee2e2" : "#f3f4f6" }}>
+                        <div key={key} style={{ textAlign: "center", padding: "12px 24px", borderRadius: 8, background: key === "PROCEED" ? "#dcfce7" : key === "DECLINE" ? "#fee2e2" : "#f3f4f6", flex: 1 }}>
                           <div style={{ fontSize: 28, fontWeight: 700, color: key === "PROCEED" ? "#166534" : key === "DECLINE" ? "#991b1b" : "#374151" }}>{count}</div>
                           <div style={{ fontSize: 12, fontWeight: 600, color: key === "PROCEED" ? "#166534" : key === "DECLINE" ? "#991b1b" : "#6b7280" }}>{key}</div>
                         </div>
@@ -545,9 +802,9 @@ export default function Dashboard() {
               </>
             )}
 
-            {/* ============================================================= */}
+            {/* ============================================================ */}
             {/* ALL PROJECTS TAB */}
-            {/* ============================================================= */}
+            {/* ============================================================ */}
             {tab === "projects" && (
               <Section>
                 <DataTable
@@ -567,9 +824,7 @@ export default function Dashboard() {
               </Section>
             )}
 
-            <div style={s.footer}>
-              Generated {new Date(d.generated_at).toLocaleString()} via Smartsheet API
-            </div>
+            <div style={s.footer}>Generated {new Date(d.generated_at).toLocaleString()} via Smartsheet API</div>
           </>
         )}
 
@@ -588,7 +843,7 @@ export default function Dashboard() {
 // Styles
 // ---------------------------------------------------------------------------
 const s = {
-  container: { maxWidth: 1400, margin: "0 auto", padding: "24px 24px 48px" },
+  container: { maxWidth: 1440, margin: "0 auto", padding: "24px 24px 48px" },
   header: { textAlign: "center", marginBottom: 24 },
   title: { fontSize: 26, fontWeight: 700, color: "#1a1a2e" },
   subtitle: { color: "#6b7280", fontSize: 14, marginTop: 4, display: "flex", justifyContent: "center", alignItems: "center", gap: 12 },
@@ -599,12 +854,13 @@ const s = {
   kpiLabel: { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "#6b7280", marginBottom: 4 },
   kpiValue: { fontSize: 28, fontWeight: 700 },
   kpiDetail: { fontSize: 11, color: "#6b7280", marginTop: 2 },
-  miniKpi: { background: "#f8f9fa", borderRadius: 8, padding: "10px 12px" },
-  miniLabel: { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, color: "#6b7280", marginBottom: 2 },
-  miniValue: { fontSize: 20, fontWeight: 700, color: "#1a1a2e" },
+  execKpi: { background: "#fff", borderRadius: 12, padding: "20px 20px 16px", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", textAlign: "center" },
+  execLabel: { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, color: "#6b7280", marginBottom: 6 },
+  execValue: { fontSize: 32, fontWeight: 800, lineHeight: 1 },
+  execSub: { fontSize: 11, color: "#9ca3af", marginTop: 6 },
   chartRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 },
-  section: { background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: 600, marginBottom: 14, color: "#1a1a2e" },
+  section: { background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", marginBottom: 0 },
+  sectionTitle: { fontSize: 16, fontWeight: 600, color: "#1a1a2e", margin: 0 },
   barRow: { display: "flex", alignItems: "center", marginBottom: 6 },
   barLabel: { width: 130, fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   barTrack: { flex: 1, height: 20, background: "#f0f2f5", borderRadius: 6, overflow: "hidden" },
@@ -615,5 +871,6 @@ const s = {
   table: { width: "100%", borderCollapse: "collapse", fontSize: 12 },
   th: { textAlign: "left", padding: "8px 8px", fontWeight: 600, color: "#6b7280", borderBottom: "2px solid #e5e7eb", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" },
   td: { padding: "7px 8px", borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap", fontSize: 12 },
+  matrixTh: { padding: "4px 4px 20px", fontSize: 10, fontWeight: 600, color: "#6b7280", textAlign: "center", borderBottom: "2px solid #e5e7eb", verticalAlign: "bottom", height: 60 },
   footer: { textAlign: "center", color: "#9ca3af", fontSize: 12, marginTop: 32 },
 };
