@@ -9,7 +9,7 @@ export async function GET() {
     const sourceType = process.env.SMARTSHEET_SOURCE_TYPE || "report";
 
     const endpoint = sourceType === "report"
-      ? `${BASE_URL}/reports/${sourceId}?pageSize=10000`
+      ? `${BASE_URL}/reports/${sourceId}?pageSize=10000&include=sourceSheets`
       : `${BASE_URL}/sheets/${sourceId}?pageSize=10000`;
 
     const res = await fetch(endpoint, {
@@ -24,84 +24,50 @@ export async function GET() {
       colMap[id] = col.title;
     }
 
-    // Inspect ALL row-level properties (not just cells)
-    const rowAnalysis = (raw.rows || []).map((row, idx) => {
-      // Extract every key on the row object EXCEPT cells
-      const rowMeta = {};
-      for (const key of Object.keys(row)) {
-        if (key === "cells") continue;
-        rowMeta[key] = row[key];
-      }
+    // Source sheets mapping
+    const sourceSheets = (raw.sourceSheets || []).map((s) => ({
+      id: s.id, name: s.name,
+    }));
+    const sheetIdMap = {};
+    for (const s of sourceSheets) sheetIdMap[s.id] = s.name;
 
-      // Extract cell values
-      const cellData = {};
-      for (const cell of row.cells || []) {
-        const colId = cell.virtualColumnId || cell.columnId;
-        const colName = colMap[colId] || `col_${colId}`;
-        cellData[colName] = {
-          value: cell.value,
-          displayValue: cell.displayValue,
-          // Include any extra cell properties
-          ...(cell.formula ? { formula: cell.formula } : {}),
-          ...(cell.hyperlink ? { hyperlink: cell.hyperlink } : {}),
-          ...(cell.linksOutToCells ? { linksOutToCells: cell.linksOutToCells } : {}),
-        };
-      }
-
-      return { rowIndex: idx, meta: rowMeta, cells: cellData };
-    });
-
-    // Find rows that look like summaries (no sheetName, or special properties)
-    const uniqueRowKeys = new Set();
+    // Count rows per source sheet
+    const rowsBySheet = {};
     for (const row of raw.rows || []) {
-      for (const key of Object.keys(row)) {
-        uniqueRowKeys.add(key);
-      }
+      const name = sheetIdMap[row.sheetId] || `unknown_${row.sheetId}`;
+      rowsBySheet[name] = (rowsBySheet[name] || 0) + 1;
     }
 
-    // Count rows by sheetName
-    const sheetNameCounts = {};
-    let noSheetName = 0;
+    // Count rows per workflow status
+    const rowsByWorkflow = {};
     for (const row of raw.rows || []) {
-      if (row.sheetName) {
-        sheetNameCounts[row.sheetName] = (sheetNameCounts[row.sheetName] || 0) + 1;
-      } else {
-        noSheetName++;
-      }
+      const wfCell = (row.cells || []).find((c) => {
+        const cid = c.virtualColumnId || c.columnId;
+        return colMap[cid] === "Workflow Status";
+      });
+      const wf = wfCell?.displayValue || wfCell?.value || "EMPTY";
+      rowsByWorkflow[wf] = (rowsByWorkflow[wf] || 0) + 1;
     }
 
-    // Show distinct values of any boolean or flag-like properties
-    const flagProps = {};
-    for (const key of uniqueRowKeys) {
-      if (key === "cells" || key === "id") continue;
-      const values = new Set();
-      for (const row of raw.rows || []) {
-        values.add(String(row[key] ?? "undefined"));
-      }
-      if (values.size <= 20) { // Only show if not too many unique values
-        flagProps[key] = [...values];
-      } else {
-        flagProps[key] = `${values.size} unique values`;
-      }
+    // Cross-tabulate: workflow status x source sheet
+    const crossTab = {};
+    for (const row of raw.rows || []) {
+      const sheetName = sheetIdMap[row.sheetId] || `unknown_${row.sheetId}`;
+      const wfCell = (row.cells || []).find((c) => {
+        const cid = c.virtualColumnId || c.columnId;
+        return colMap[cid] === "Workflow Status";
+      });
+      const wf = wfCell?.displayValue || wfCell?.value || "EMPTY";
+      const key = `${sheetName} | ${wf}`;
+      crossTab[key] = (crossTab[key] || 0) + 1;
     }
 
     return NextResponse.json({
       totalRows: raw.rows?.length || 0,
-      totalColumns: raw.columns?.length || 0,
-      allRowProperties: [...uniqueRowKeys],
-      propertyValues: flagProps,
-      sheetNameCounts,
-      rowsWithoutSheetName: noSheetName,
-      // Show first 5 and last 5 rows for inspection
-      firstRows: rowAnalysis.slice(0, 5),
-      lastRows: rowAnalysis.slice(-5),
-      // Find any rows that have unusual properties
-      potentialSummaryRows: rowAnalysis.filter((r) =>
-        !r.meta.sheetName ||
-        r.meta.expanded === false ||
-        r.meta.filteredOut === true ||
-        Object.keys(r.meta).length !== Object.keys(rowAnalysis[0]?.meta || {}).length
-      ).slice(0, 20),
+      sourceSheets,
+      rowsBySheet,
+      rowsByWorkflow,
+      crossTab,
     });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
