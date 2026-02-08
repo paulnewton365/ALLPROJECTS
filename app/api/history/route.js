@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { getHistory, appendHistory } from "../../../lib/history.js";
+import { fetchSnapshot } from "../../../lib/smartsheet.js";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { getHistory } = require("@/lib/history");
     const history = await getHistory();
     return NextResponse.json({ history });
   } catch (err) {
@@ -12,13 +13,9 @@ export async function GET() {
   }
 }
 
-// Manual trigger: POST /api/history to log current snapshot
 export async function POST() {
   try {
-    const { fetchSnapshot } = require("@/lib/smartsheet");
-    const { appendHistory } = require("@/lib/history");
     const snapshot = await fetchSnapshot();
-
     const netOverservice = snapshot.live.financials.total_overage - snapshot.live.financials.total_investment;
     const entry = {
       date: new Date().toISOString().split("T")[0],
@@ -31,7 +28,6 @@ export async function POST() {
       overserviced_count: snapshot.live.financials.overserviced_count,
       burn_rate: snapshot.live.financials.burn_rate_pct,
     };
-
     const history = await appendHistory(entry);
     return NextResponse.json({ logged: entry, total_entries: history.length });
   } catch (err) {
