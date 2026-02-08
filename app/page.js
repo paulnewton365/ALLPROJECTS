@@ -504,13 +504,11 @@ const mkNewbizCols = (dn) => [
   { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
   { key: "client_name", label: "Client", w: 130, filter: true, style: { fontWeight: 600 } },
   { key: "project_name", label: "Opportunity", w: 200 },
-  { key: "workflow_status", label: "Stage", w: 130, filter: true, render: (v) => { const sn = stageName(v, dn); return <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: `${STAGE_COLORS[sn] || T.textDim}22`, color: STAGE_COLORS[sn] || T.textDim, fontWeight: 600 }}>{sn}</span>; } },
-  { key: "recommendation", label: "Rec", w: 90, filter: true, render: (v) => { const c = (!v || v === "-" || v.toLowerCase() === "none") ? "Not Qualified" : v; return <span style={{ fontSize: 11, fontWeight: 700, color: c === "PROCEED" ? T.green : c === "DECLINE" ? T.red : T.textDim }}>{c}</span>; } },
-  { key: "budget_forecast", label: "Forecast", w: 95, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
-  { key: "win_probability", label: "Win %", w: 55, render: (v) => <span style={{ fontSize: 12, fontWeight: 600, color: v >= 75 ? T.green : v >= 50 ? T.yellow : v > 0 ? T.orange : T.textDim }}>{pct(v)}</span> },
-  { key: "weighted_pipeline", label: "Weighted", w: 90, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
+  { key: "workflow_status", label: "Status", w: 130, filter: true, render: (v) => { const sn = stageName(v, dn); return <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: `${STAGE_COLORS[sn] || T.textDim}22`, color: STAGE_COLORS[sn] || T.textDim, fontWeight: 600 }}>{sn}</span>; } },
+  { key: "win_probability", label: "Win %", w: 65, render: (v) => <span style={{ fontSize: 12, fontWeight: 600, color: v >= 75 ? T.green : v >= 50 ? T.yellow : v > 0 ? T.orange : T.textDim }}>{pct(v)}</span> },
+  { key: "budget_forecast", label: "Budget Forecast", w: 110, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
+  { key: "weighted_pipeline", label: "Weighted Forecast", w: 110, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
   { key: "ecosystem", label: "Ecosystem", w: 85, filter: true, render: (v) => <span style={{ fontSize: 11, fontWeight: 600, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
-  { key: "request_type", label: "Services", w: 180 },
   { key: "project_manager", label: "Lead", w: 110, filter: true },
 ];
 
