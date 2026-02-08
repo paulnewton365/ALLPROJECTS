@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.6.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -897,7 +897,7 @@ export default function Dashboard() {
             <Section title="Weighted Pipeline by Ecosystem" subtitle="Climate · Health · Real Estate · Public Affairs"><StackedPipeline data={nbEcoPipeline} displayNames={dn} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
-            <Section title="Qualification Recommendation" subtitle="% of pipeline">{(() => { const total = Object.values(d.newbiz.by_recommendation).reduce((a, b) => a + b, 0) || 1; return (
+            <Section title="Qualification Recommendation" subtitle="% of pipeline">{(() => { const total = Object.values(d.newbiz.by_recommendation).reduce((a, b) => a + b, 0) || 1; return (<>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>{Object.entries(d.newbiz.by_recommendation).sort((a, b) => b[1] - a[1]).map(([key, count]) => {
                 const pctVal = Math.round((count / total) * 100); const color = key === "PROCEED" ? T.green : key === "DECLINE" ? T.red : T.textDim;
                 return <div key={key} style={{ textAlign: "center", padding: "14px 20px", borderRadius: 10, background: T.bgHover, border: `1px solid ${T.border}`, flex: 1, minWidth: 90 }}>
@@ -907,7 +907,7 @@ export default function Dashboard() {
                 </div>; })}</div>
               <div style={{ marginTop: 14, padding: "10px 14px", background: T.bgHover, borderRadius: 8, border: `1px solid ${T.border}`, fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>
                 <strong style={{ color: T.text }}>Not Qualified</strong> means live new business opportunities that did not go through formal qualification before being activated as a proposal. Qualification is our way of assuring opportunities are viable before investing in them.
-              </div>); })()}</Section>
+              </div></>); })()}</Section>
             <Section title="Data Completeness" subtitle="Pipeline data quality">
               <DataCompleteness data={d.newbiz.data_completeness} />
               {(() => {
