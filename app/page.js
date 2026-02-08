@@ -42,7 +42,7 @@ const RAG = {
 };
 
 const ECO_COLORS = { Climate: T.green, "Real Estate": T.blue, Health: T.pink, "Public Affairs": T.purple, HOWL: T.orange };
-const STAGE_COLORS = { "In Qualification": "#7c5cbf", Proposal: "#5b6abf", "Waiting For Response": "#3b73c4", "Working On Contract": "#2a8f4e", "On Hold": "#9a9a9a" };
+const STAGE_COLORS = { "In Qualification": "#9b59b6", Proposal: "#e67e22", "Waiting For Response": "#3498db", "Working On Contract": "#27ae60", "On Hold": "#95a5a6" };
 const STAGE_ORDER_ARR = ["In Qualification", "Proposal", "Waiting For Response", "Working On Contract", "On Hold"];
 
 function burnColor(rate) { return rate <= 50 ? T.green : rate <= 70 ? "#6a9e2a" : rate <= 85 ? T.yellow : rate <= 95 ? T.orange : T.red; }
