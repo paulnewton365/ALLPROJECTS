@@ -560,7 +560,7 @@ export default function Dashboard() {
     <div style={s.container}>
       <div style={s.header}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 4, color: T.textMuted, textTransform: "uppercase", marginBottom: 4 }}><img src="https://ktuyiikwhspwmzvyczit.supabase.co/storage/v1/object/public/assets/brand/antenna-new-logo.svg" alt="Antenna Group" style={{ height: 28, marginBottom: 4 }} /></div>
-        <h1 style={s.title}>{d?.title || "Project Snapshot"}</h1>
+        <h1 style={s.title}>{d?.title || "Antenna Group — All Projects Dashboard"}</h1>
         <div style={s.subtitle}>
           <span>{d ? `${d.total_projects} active projects` : ""}</span>
           <button onClick={loadData} disabled={loading} style={s.accentBtn}>{loading ? "Loading..." : "↻ Refresh"}</button>
@@ -730,7 +730,7 @@ export default function Dashboard() {
 const s = {
   container: { maxWidth: 1440, margin: "0 auto", padding: "28px 28px 48px" },
   header: { textAlign: "center", marginBottom: 28 },
-  title: { fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.5 },
+  title: { fontSize: 32, fontWeight: 800, color: T.text, letterSpacing: -0.5 },
   subtitle: { color: T.textMuted, fontSize: 13, marginTop: 6, display: "flex", justifyContent: "center", alignItems: "center", gap: 12 },
   accentBtn: { background: T.accent, color: T.text, border: "none", borderRadius: 6, padding: "6px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3 },
   refreshBtn: { background: T.bgHover, color: T.text, border: `1px solid ${T.border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" },
