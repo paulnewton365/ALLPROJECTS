@@ -834,7 +834,25 @@ export default function Dashboard() {
                   <div style={{ fontSize: 11, fontWeight: 600, color, marginTop: 2 }}>{key}</div>
                   <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{count} deals</div>
                 </div>; })}</div>); })()}</Section>
-            <Section title="Data Completeness" subtitle="Pipeline data quality"><DataCompleteness data={d.newbiz.data_completeness} /></Section>
+            <Section title="Data Completeness" subtitle="Pipeline data quality">
+              <DataCompleteness data={d.newbiz.data_completeness} />
+              {(() => {
+                const nbProjects = d.newbiz.projects;
+                const untracked = nbProjects.filter((p) => p.actuals_display === "No Tracking");
+                const pctUntracked = nbProjects.length ? Math.round((untracked.length / nbProjects.length) * 100) : 0;
+                return (
+                  <div style={{ marginTop: 16, padding: "12px 14px", background: pctUntracked > 50 ? "#ffebee" : T.bgHover, borderRadius: 8, border: `1px solid ${pctUntracked > 50 ? "#ef9a9a" : T.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>Pursuit Effort Not Tracked</div>
+                        <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{untracked.length} of {nbProjects.length} opportunities have no actuals tracking</div>
+                      </div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: pctUntracked > 50 ? T.red : pctUntracked > 25 ? T.yellow : T.green }}>{pctUntracked}%</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </Section>
           </div>
           <Section title="Win Probability & Services by Ecosystem" subtitle="Billable P&Ls"><EcoWinServices data={d.newbiz.eco_win_services} billable={billable} /></Section>
           <div style={{ height: 16 }} />
