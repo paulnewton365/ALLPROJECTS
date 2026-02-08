@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.6.2";
+const APP_VERSION = "1.6.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -929,6 +929,30 @@ export default function Dashboard() {
             </Section>
           </div>
           <Section title="Win Probability & Services by Ecosystem" subtitle="Billable P&Ls"><EcoWinServices data={d.newbiz.eco_win_services} billable={billable} /></Section>
+          <div style={{ height: 16 }} />
+          <Section title="Services Being Pursued" subtitle="What kind of work is in the pipeline">
+            {(() => {
+              const bySvc = {};
+              d.newbiz.projects.forEach((p) => {
+                const svc = p.request_type || "Unspecified";
+                svc.split(",").map((s) => s.trim()).filter((s) => s && s !== "-").forEach((s) => { bySvc[s] = (bySvc[s] || 0) + 1; });
+              });
+              const svcEntries = Object.entries(bySvc).sort((a, b) => b[1] - a[1]);
+              if (!svcEntries.length) return <div style={{ color: T.textDim }}>No service data</div>;
+              const maxSvc = svcEntries[0][1];
+              return (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {svcEntries.slice(0, 20).map(([name, count]) => {
+                    const intensity = 0.3 + (count / maxSvc) * 0.7;
+                    return <div key={name} style={{ padding: "6px 14px", borderRadius: 8, background: `rgba(217, 122, 26, ${intensity * 0.15})`, border: `1px solid rgba(217, 122, 26, ${intensity * 0.4})`, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{name}</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: T.orange, opacity: intensity }}>{count}</span>
+                    </div>;
+                  })}
+                </div>
+              );
+            })()}
+          </Section>
           <div style={{ height: 16 }} />
           <Section title="Pipeline Deals" subtitle="Proposal → Waiting → Contract → Qualification → On Hold"><DataTable data={nbProjectsSorted} columns={mkNewbizCols(dn)} /></Section>
         </>)}
