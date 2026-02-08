@@ -498,7 +498,6 @@ const mkLiveCols = (dn) => [
   { key: "percent_complete", label: "% Done", w: 55, render: (v) => <span style={{ fontSize: 12, color: T.textMuted }}>{pct(v)}</span> },
   { key: "project_manager", label: "PM/Prod", w: 110, filter: true },
   { key: "ecosystem", label: "Ecosystem", w: 85, filter: true, render: (v) => <span style={{ fontSize: 11, fontWeight: 600, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
-  { key: "work_progress", label: "Progress", w: 100 },
 ];
 
 const mkNewbizCols = (dn) => [
@@ -553,6 +552,8 @@ export default function Dashboard() {
   const dn = d?.stage_display_names || {};
   const liveEcoBillable = useMemo(() => billableOnly(d?.live?.by_ecosystem || [], billable), [d, billable]);
   const nbEcoBillable = useMemo(() => billableOnly(d?.newbiz?.pipeline_by_ecosystem || [], billable, "ecosystem"), [d, billable]);
+  const pipelineEcos = ["Climate", "Real Estate", "Health", "Public Affairs"];
+  const nbEcoPipeline = useMemo(() => billableOnly(d?.newbiz?.pipeline_by_ecosystem || [], pipelineEcos, "ecosystem"), [d]);
   const liveProjectsBillable = useMemo(() => d ? d.live.projects.filter((p) => billable.some((b) => (p.ecosystem || "").toLowerCase().includes(b.toLowerCase()))).sort((a, b) => (b.overage || 0) - (a.overage || 0)) : [], [d, billable]);
   const nbProjectsSorted = useMemo(() => { if (!d) return []; const order = d.pipeline_stage_order || []; return [...d.newbiz.projects].sort((a, b) => (order.indexOf(a.workflow_status) === -1 ? 999 : order.indexOf(a.workflow_status)) - (order.indexOf(b.workflow_status) === -1 ? 999 : order.indexOf(b.workflow_status))); }, [d]);
 
@@ -560,7 +561,7 @@ export default function Dashboard() {
     <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
     <div style={s.container}>
       <div style={s.header}>
-        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 4, color: T.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Antenna Group</div>
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 4, color: T.textMuted, textTransform: "uppercase", marginBottom: 4 }}><img src="https://ktuyiikwhspwmzvyczit.supabase.co/storage/v1/object/public/assets/brand/antenna-new-logo.svg" alt="Antenna Group" style={{ height: 28, marginBottom: 4 }} /></div>
         <h1 style={s.title}>{d?.title || "Project Snapshot"}</h1>
         <div style={s.subtitle}>
           <span>{d ? `${d.total_projects} active projects` : ""}</span>
@@ -575,7 +576,7 @@ export default function Dashboard() {
           { key: "overview", label: "Executive Overview" },
           { key: "live", label: "Live Work", count: d.live.count },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
-          { key: "internal", label: "Internal Projects", count: d.internal.count },
+          { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
         ]} active={tab} onChange={setTab} />
 
         {/* ============ EXECUTIVE OVERVIEW ============ */}
@@ -588,7 +589,7 @@ export default function Dashboard() {
             <Section title="Overservice Exposure" subtitle="FTC · Dashed = investment offset"><DivergingOverservice ecosystems={liveEcoBillable} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
-            <Section title="Weighted Pipeline by Ecosystem" subtitle="Stacked by stage"><StackedPipeline data={nbEcoBillable} displayNames={dn} /></Section>
+            <Section title="Weighted Pipeline by Ecosystem" subtitle="Stacked by stage"><StackedPipeline data={nbEcoPipeline} displayNames={dn} /></Section>
             <Section title="Service Mix by Ecosystem" subtitle="Size = projects · Opacity = budget"><BubbleMatrix matrix={d.live.ecosystem_request_type} billable={billable} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
@@ -635,15 +636,18 @@ export default function Dashboard() {
             <Section title="Overage by Ecosystem" subtitle="Billable P&Ls"><BarChart data={liveEcoBillable.filter((e) => e.overage !== 0).sort((a,b) => b.overage - a.overage)} labelKey="name" valueKey="overage" color={(i) => i.overage > 0 ? T.red : T.green} formatValue={fmtK} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
-            <Section title="Creative Retainers">{d.live.creative_retainers.length > 0 ? (<div>
-              {d.live.creative_retainers.map((cr) => (
-                <div key={cr.rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${T.border}`, fontSize: 12 }}>
-                  <span style={{ fontFamily: "monospace", color: T.textDim, width: 55 }}>{cr.rid}</span>
-                  <span style={{ fontWeight: 600, flex: 1 }}>{cr.client}</span>
-                  <span style={{ fontFamily: "monospace", fontWeight: 700, color: T.text }}>{fmtK(cr.retainer)}</span>
-                  <span style={{ fontSize: 11, color: ECO_COLORS[cr.ecosystem] || T.textMuted }}>{cr.ecosystem}</span>
-                </div>))}
-            </div>) : <div style={{ color: T.textDim }}>No creative retainers active</div>}</Section>
+            <Section title="Top Underservice" subtitle="Greatest underservice first">{(() => {
+              const under = d.live.projects.filter((p) => p.overage != null && p.overage < 0).sort((a, b) => a.overage - b.overage);
+              return under.length > 0 ? (<div>
+                {under.slice(0, 12).map((p) => (
+                  <div key={p.rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${T.border}`, fontSize: 12 }}>
+                    <span style={{ fontFamily: "monospace", color: T.textDim, width: 55 }}>{p.rid}</span>
+                    <span style={{ fontWeight: 600, flex: 1 }}>{p.client_name}</span>
+                    <span style={{ color: T.textMuted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.project_name}</span>
+                    <span style={{ fontFamily: "monospace", fontWeight: 700, color: T.blue, minWidth: 70, textAlign: "right" }}>{fmtK(Math.abs(p.overage))}</span>
+                    <span style={{ fontSize: 11, color: ECO_COLORS[p.ecosystem] || T.textMuted }}>{p.ecosystem}</span>
+                  </div>))}
+              </div>) : <div style={{ color: T.textDim }}>No underservice accounts</div>; })()}</Section>
             <Section title="Budget by Client (Top 12)"><BarChart data={d.live.by_client} labelKey="name" valueKey="budget" color={T.blue} formatValue={fmtK} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
@@ -663,7 +667,7 @@ export default function Dashboard() {
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Pipeline by Stage"><PipelineFunnel funnel={d.newbiz.pipeline_funnel} displayNames={dn} /></Section>
-            <Section title="Weighted Pipeline by Ecosystem" subtitle="Billable P&Ls"><StackedPipeline data={nbEcoBillable} displayNames={dn} /></Section>
+            <Section title="Weighted Pipeline by Ecosystem" subtitle="Climate · Health · Real Estate · Public Affairs"><StackedPipeline data={nbEcoPipeline} displayNames={dn} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Qualification Recommendation" subtitle="% of pipeline">{(() => { const total = Object.values(d.newbiz.by_recommendation).reduce((a, b) => a + b, 0) || 1; return (
@@ -683,19 +687,25 @@ export default function Dashboard() {
 
         {/* ============ INTERNAL ============ */}
         {tab === "internal" && (<>
+          {(() => {
+            const intProjects = d.internal.projects.filter((p) => p.category !== "Internal Admin Time");
+            const intCategories = d.internal.by_category.filter((c) => c.name !== "Internal Admin Time");
+            const intInvestment = intProjects.reduce((sum, p) => sum + (p.approved_investment || 0), 0);
+            const intActuals = intProjects.reduce((sum, p) => sum + (typeof p.actuals_display === "number" ? p.actuals_display : 0), 0);
+            return (<>
           <div className="kpi-grid" style={{ ...s.kpiGrid, gridTemplateColumns: "repeat(3, 1fr)" }}>
-            <KPI label="Internal Projects" value={d.internal.count} />
-            <KPI label="Approved Investment" value={fmtK(d.internal.total_investment)} color={T.purple} />
-            <KPI label="Actuals" value={fmtK(d.internal.total_actuals)} />
+            <KPI label="Internal Projects" value={intProjects.length} />
+            <KPI label="Approved Investment" value={fmtK(intInvestment)} color={T.purple} />
+            <KPI label="Actuals" value={fmtK(intActuals)} />
           </div>
-          {d.internal.by_category.length > 0 && <Section title="By Category">{d.internal.by_category.map((cat) => (
+          {intCategories.length > 0 && <Section title="By Category">{intCategories.map((cat) => (
             <div key={cat.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{cat.name}</div>
               <div style={{ fontSize: 12, color: T.textMuted }}>{cat.projects} projects</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.purple, minWidth: 80, textAlign: "right" }}>{fmtK(cat.investment)}</div>
             </div>))}</Section>}
           <div style={{ height: 16 }} />
-          <Section title="Internal Projects"><DataTable data={d.internal.projects} columns={[
+          <Section title="Internal Projects"><DataTable data={intProjects} columns={[
             { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
             { key: "client_name", label: "Client", w: 140, style: { fontWeight: 600 } },
             { key: "project_name", label: "Assignment", w: 250 },
@@ -705,6 +715,7 @@ export default function Dashboard() {
             { key: "work_progress", label: "Progress", w: 120 },
             { key: "project_manager", label: "PM/Prod", w: 120, filter: true },
           ]} /></Section>
+        </>); })()}
         </>)}
 
         <div style={s.footer}>Generated {new Date(d.generated_at).toLocaleString()}</div>
