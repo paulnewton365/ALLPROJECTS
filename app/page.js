@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.7.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -361,8 +361,10 @@ function EcoWinServices({ data, billable }) {
     <div key={eco.ecosystem} style={{ marginBottom: 14, padding: "12px 14px", background: T.bgHover, borderRadius: 8, border: `1px solid ${T.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: ECO_COLORS[eco.ecosystem] || T.textMuted }}>{eco.ecosystem}</span>
-        <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
           <span style={{ fontSize: 11, color: T.textDim }}>{eco.deal_count} deals</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{fmtK(eco.weighted)}</span>
+          <span style={{ fontSize: 10, color: T.textDim }}>{fmtK(eco.forecast)} fcst</span>
           {eco.avg_win_pct != null && <span style={{ fontSize: 14, fontWeight: 700, color: eco.avg_win_pct >= 50 ? T.green : eco.avg_win_pct >= 25 ? T.yellow : T.red }}>{eco.avg_win_pct}% Avg Win Potential</span>}
         </div>
       </div>
