@@ -1,15 +1,14 @@
-import { NextResponse } from "next/server";
-import { getHistory, appendHistory } from "../../../lib/history.js";
-import { fetchSnapshot } from "../../../lib/smartsheet.js";
+const { getHistory, appendHistory } = require("../../../lib/history");
+const { fetchSnapshot } = require("../../../lib/smartsheet");
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const history = await getHistory();
-    return NextResponse.json({ history });
+    return Response.json({ history });
   } catch (err) {
-    return NextResponse.json({ history: [], error: err.message });
+    return Response.json({ history: [], error: err.message });
   }
 }
 
@@ -29,8 +28,8 @@ export async function POST() {
       burn_rate: snapshot.live.financials.burn_rate_pct,
     };
     const history = await appendHistory(entry);
-    return NextResponse.json({ logged: entry, total_entries: history.length });
+    return Response.json({ logged: entry, total_entries: history.length });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }

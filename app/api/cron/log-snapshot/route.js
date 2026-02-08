@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
-import { appendHistory } from "../../../../lib/history.js";
-import { fetchSnapshot } from "../../../../lib/smartsheet.js";
+const { appendHistory } = require("../../../../lib/history");
+const { fetchSnapshot } = require("../../../../lib/smartsheet");
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +7,7 @@ export async function GET(request) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
     const snapshot = await fetchSnapshot();
@@ -25,8 +24,8 @@ export async function GET(request) {
       burn_rate: snapshot.live.financials.burn_rate_pct,
     };
     const history = await appendHistory(entry);
-    return NextResponse.json({ success: true, logged: entry, total_entries: history.length });
+    return Response.json({ success: true, logged: entry, total_entries: history.length });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
