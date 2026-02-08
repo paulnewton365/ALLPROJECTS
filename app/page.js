@@ -47,7 +47,7 @@ const STAGE_ORDER_ARR = ["In Qualification", "Proposal", "Waiting For Response",
 
 function burnColor(rate) { return rate <= 50 ? T.green : rate <= 70 ? "#6a9e2a" : rate <= 85 ? T.yellow : rate <= 95 ? T.orange : T.red; }
 function stageName(raw, dn) { return dn?.[raw] || raw; }
-function billableOnly(arr, ecos, key = "name") { if (!ecos?.length) return arr; const l = ecos.map((e) => e.toLowerCase()); return arr.filter((i) => l.some((e) => (i[key] || "").toLowerCase().includes(e))); }
+function billableOnly(arr, ecos, key = "name") { if (!ecos?.length) return arr; const l = ecos.map((e) => e.toLowerCase()); return arr.filter((i) => l.includes((i[key] || "").toLowerCase())); }
 
 // ---------------------------------------------------------------------------
 // Shared Components
@@ -710,7 +710,7 @@ export default function Dashboard() {
             { key: "category", label: "Category", w: 160, filter: true },
             { key: "approved_investment", label: "Approved Investment", w: 120, fmt: fmtK, style: { fontFamily: "monospace" } },
             { key: "actuals_display", label: "Actuals", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: v === "No Tracking" ? T.textDim : T.text }}>{typeof v === "number" ? fmtK(v) : v}</span> },
-            { key: "work_progress", label: "Progress", w: 120 },
+            { key: "percent_complete", label: "% Done", w: 70, render: (v) => <span style={{ fontSize: 12, color: T.textMuted }}>{pct(v)}</span> },
             { key: "project_manager", label: "PM/Prod", w: 120, filter: true },
           ]} /></Section>
         </>); })()}
