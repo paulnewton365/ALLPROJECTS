@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
+const APP_VERSION = "1.6.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -563,6 +564,7 @@ export default function Dashboard() {
         <h1 style={s.title}>{d?.title || "Antenna Group — All Projects Dashboard"}</h1>
         <div style={s.subtitle}>
           <span>{d ? `${d.total_projects} active projects` : ""}</span>
+          <span style={{ fontSize: 10, color: T.textDim, background: T.bgHover, padding: "2px 8px", borderRadius: 4, fontFamily: "monospace" }}>v{APP_VERSION}</span>
           <button onClick={loadData} disabled={loading} style={s.accentBtn}>{loading ? "Loading..." : "↻ Refresh"}</button>
         </div>
       </div>
@@ -964,7 +966,7 @@ export default function Dashboard() {
         </>); })()}
         </>)}
 
-        <div style={s.footer}>Generated {new Date(d.generated_at).toLocaleString()}</div>
+        <div style={s.footer}>Generated {new Date(d.generated_at).toLocaleString()} · v{APP_VERSION}</div>
       </>)}
 
       {loading && !data && <div style={{ textAlign: "center", padding: 80, color: T.textDim }}><div style={{ fontSize: 28, marginBottom: 12, animation: "spin 1s linear infinite" }}>⟳</div>Loading from Smartsheet...</div>}
