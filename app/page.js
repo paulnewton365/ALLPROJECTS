@@ -141,8 +141,7 @@ function ExecKPIStrip({ live, newbiz }) {
 function TrendChart({ history }) {
   if (!history?.length || history.length < 2) {
     return <div style={{ color: T.textDim, padding: 20, textAlign: "center", fontSize: 13 }}>
-      Trend data builds weekly on Mondays. {history?.length === 1 ? "1 data point logged." : "No data yet."}<br/>
-      <span style={{ fontSize: 11 }}>Hit <code style={{ background: T.bgHover, padding: "2px 6px", borderRadius: 4 }}>POST /api/history</code> to log the current snapshot.</span>
+      {history?.length === 1 ? "First data point logged. Trend chart will appear after next week's snapshot." : "Logging first data point..."}
     </div>;
   }
 
@@ -537,6 +536,13 @@ export default function Dashboard() {
       const hist = await histRes.json();
       if (snap.error) throw new Error(snap.error);
       setData(snap); setHistory(hist.history || []); setError(null);
+      // Auto-seed: log first data point if history is empty
+      if (!hist.history?.length) {
+        fetch("/api/history", { method: "POST" })
+          .then((r) => r.json())
+          .then((res) => { if (res.logged) setHistory([res.logged]); })
+          .catch(() => {});
+      }
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
