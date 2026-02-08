@@ -15,8 +15,8 @@ const nextConfig = {
       {
         source: "/:path*",
         headers: [
-          { key: "X-Frame-Options", value: "ALLOWALL" },
-          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "Content-Security-Policy", value: "frame-ancestors * https://*.smartsheet.com https://*.smartsheetapps.com https://*.smartsheetgov.com" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
         ],
       },
     ];
