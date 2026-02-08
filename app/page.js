@@ -573,6 +573,7 @@ export default function Dashboard() {
         <Tabs tabs={[
           { key: "overview", label: "Executive Overview" },
           { key: "live", label: "Live Work", count: d.live.count },
+          { key: "redlist", label: "Red List", count: d.live.projects.filter((p) => p.rag_color === "red").length },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
         ]} active={tab} onChange={setTab} />
@@ -653,6 +654,163 @@ export default function Dashboard() {
             <Section title="Resource Status"><PillChart data={d.live.resource_status} /></Section>
           </div>
           <Section title="Live Projects" subtitle="Billable ecosystems · Sorted by overage"><DataTable data={liveProjectsBillable} columns={mkLiveCols(dn)} /></Section>
+        </>)}
+
+        {/* ============ RED LIST ============ */}
+        {tab === "redlist" && (<>
+          {(() => {
+            const reds = d.live.projects.filter((p) => p.rag_color === "red").sort((a, b) => b.overage - a.overage);
+            const totalOverage = reds.reduce((sum, p) => sum + (p.overage || 0), 0);
+            const totalBudget = reds.reduce((sum, p) => sum + (p.budget_forecast || 0), 0);
+            const totalActuals = reds.reduce((sum, p) => sum + (typeof p.actuals_display === "number" ? p.actuals_display : 0), 0);
+
+            // By ecosystem
+            const byEco = {}; reds.forEach((p) => { const e = p.ecosystem || "Unassigned"; byEco[e] = byEco[e] || { count: 0, overage: 0, budget: 0 }; byEco[e].count++; byEco[e].overage += p.overage || 0; byEco[e].budget += p.budget_forecast || 0; });
+            const ecoEntries = Object.entries(byEco).sort((a, b) => b[1].overage - a[1].overage);
+
+            // By client
+            const byClient = {}; reds.forEach((p) => { const c = p.client_name || "Unknown"; byClient[c] = byClient[c] || { count: 0, overage: 0 }; byClient[c].count++; byClient[c].overage += p.overage || 0; });
+            const clientEntries = Object.entries(byClient).sort((a, b) => b[1].overage - a[1].overage);
+
+            // By service type
+            const bySvc = {}; reds.forEach((p) => { const svc = p.request_type || "Unspecified"; svc.split(",").map((s) => s.trim()).filter(Boolean).forEach((s) => { bySvc[s] = (bySvc[s] || 0) + 1; }); });
+            const svcEntries = Object.entries(bySvc).sort((a, b) => b[1] - a[1]);
+
+            const maxClientOv = Math.max(...clientEntries.map(([, v]) => v.overage), 1);
+            const maxEcoOv = Math.max(...ecoEntries.map(([, v]) => v.overage), 1);
+
+            if (!reds.length) return <div style={{ textAlign: "center", padding: 60, color: T.green, fontSize: 18, fontWeight: 700 }}>✓ No projects on the Red List</div>;
+
+            return (<>
+              {/* KPI Strip */}
+              <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
+                <div style={s.execKpi}><div style={s.execLabel}>Red Projects</div><div style={{ ...s.execValue, color: T.red }}>{reds.length}</div><div style={s.execSub}>of {d.live.count} live projects ({Math.round((reds.length / d.live.count) * 100)}%)</div></div>
+                <div style={s.execKpi}><div style={s.execLabel}>Total Overage</div><div style={{ ...s.execValue, color: T.red }}>{fmtK(totalOverage)}</div><div style={s.execSub}>forecast overservice</div></div>
+                <div style={s.execKpi}><div style={s.execLabel}>Budget at Risk</div><div style={{ ...s.execValue, color: T.text }}>{fmtK(totalBudget)}</div><div style={s.execSub}>{fmtK(totalActuals)} spent to date</div></div>
+                <div style={s.execKpi}><div style={s.execLabel}>Avg Overage</div><div style={{ ...s.execValue, color: T.red }}>{fmtK(totalOverage / reds.length)}</div><div style={s.execSub}>per red project</div></div>
+              </div>
+
+              <div className="chart-row" style={s.chartRow}>
+                {/* Ecosystem Concentration */}
+                <Section title="Overservice by Ecosystem" subtitle="Where red projects are concentrated">
+                  <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+                    {/* Donut */}
+                    <svg width={160} height={160} viewBox="0 0 160 160" style={{ flexShrink: 0 }}>
+                      {(() => {
+                        const total = ecoEntries.reduce((s, [, v]) => s + v.overage, 0) || 1;
+                        let cumAngle = -90;
+                        return ecoEntries.map(([name, v], i) => {
+                          const pctVal = v.overage / total;
+                          const angle = pctVal * 360;
+                          const startRad = (cumAngle * Math.PI) / 180;
+                          const endRad = ((cumAngle + angle) * Math.PI) / 180;
+                          cumAngle += angle;
+                          const large = angle > 180 ? 1 : 0;
+                          const r = 65, cx = 80, cy = 80;
+                          const x1 = cx + r * Math.cos(startRad), y1 = cy + r * Math.sin(startRad);
+                          const x2 = cx + r * Math.cos(endRad), y2 = cy + r * Math.sin(endRad);
+                          return <path key={name} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z`} fill={ECO_COLORS[name] || [T.teal, T.orange, T.purple, T.textDim][i % 4]} opacity={0.85}><title>{name}: {fmtK(v.overage)} ({Math.round(pctVal * 100)}%)</title></path>;
+                        });
+                      })()}
+                      <circle cx={80} cy={80} r={35} fill={T.bgCard} />
+                      <text x={80} y={76} textAnchor="middle" fontSize="18" fontWeight="900" fill={T.red}>{reds.length}</text>
+                      <text x={80} y={92} textAnchor="middle" fontSize="9" fill={T.textDim}>projects</text>
+                    </svg>
+                    {/* Legend + detail */}
+                    <div style={{ flex: 1 }}>
+                      {ecoEntries.map(([name, v]) => (
+                        <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: "50%", background: ECO_COLORS[name] || T.textDim, flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: ECO_COLORS[name] || T.textMuted }}>{name}</div>
+                            <div style={{ height: 8, background: T.bgHover, borderRadius: 4, marginTop: 3, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 4, background: T.red, width: `${(v.overage / maxEcoOv) * 100}%` }} /></div>
+                          </div>
+                          <div style={{ textAlign: "right", minWidth: 70 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: T.red }}>{fmtK(v.overage)}</div>
+                            <div style={{ fontSize: 10, color: T.textDim }}>{v.count} project{v.count !== 1 ? "s" : ""}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Client Exposure */}
+                <Section title="Client Exposure" subtitle="Which clients carry the most red overage">
+                  {clientEntries.slice(0, 10).map(([name, v]) => (
+                    <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <div style={{ width: 120, fontSize: 12, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+                      <div style={{ flex: 1, height: 18, background: T.bgHover, borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{ height: "100%", borderRadius: 4, background: `linear-gradient(90deg, ${T.red}, ${T.red}cc)`, width: `${(v.overage / maxClientOv) * 100}%` }} />
+                      </div>
+                      <div style={{ minWidth: 60, textAlign: "right", fontSize: 12, fontWeight: 700, color: T.red }}>{fmtK(v.overage)}</div>
+                      <div style={{ minWidth: 20, fontSize: 10, color: T.textDim }}>{v.count}p</div>
+                    </div>
+                  ))}
+                </Section>
+              </div>
+
+              <div className="chart-row" style={s.chartRow}>
+                {/* Service Type Breakdown */}
+                <Section title="Service Type Breakdown" subtitle="What kind of work is going red">
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {svcEntries.slice(0, 15).map(([name, count], i) => {
+                      const maxSvc = svcEntries[0][1];
+                      const intensity = 0.3 + (count / maxSvc) * 0.7;
+                      return <div key={name} style={{ padding: "6px 14px", borderRadius: 8, background: `rgba(201, 60, 60, ${intensity * 0.15})`, border: `1px solid rgba(201, 60, 60, ${intensity * 0.4})`, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{name}</span>
+                        <span style={{ fontSize: 18, fontWeight: 900, color: T.red, opacity: intensity }}>{count}</span>
+                      </div>;
+                    })}
+                  </div>
+                </Section>
+
+                {/* Overage Distribution */}
+                <Section title="Overage Severity" subtitle="Distribution of overservice amounts">
+                  {(() => {
+                    const brackets = [
+                      { label: "$50K+", min: 50000, color: "#8b0000" },
+                      { label: "$25K–50K", min: 25000, max: 50000, color: T.red },
+                      { label: "$10K–25K", min: 10000, max: 25000, color: "#e06060" },
+                      { label: "<$10K", min: 0, max: 10000, color: "#e8a0a0" },
+                    ];
+                    const counts = brackets.map((b) => ({
+                      ...b,
+                      count: reds.filter((p) => (p.overage || 0) >= b.min && (!b.max || (p.overage || 0) < b.max)).length,
+                    }));
+                    const maxC = Math.max(...counts.map((c) => c.count), 1);
+                    return counts.map((b) => (
+                      <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                        <div style={{ width: 80, fontSize: 12, fontWeight: 600, color: T.textMuted }}>{b.label}</div>
+                        <div style={{ flex: 1, height: 26, background: T.bgHover, borderRadius: 6, overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: 6, width: `${(b.count / maxC) * 100}%`, background: b.color, display: "flex", alignItems: "center", paddingLeft: 8 }}>
+                            {b.count > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{b.count}</span>}
+                          </div>
+                        </div>
+                        <div style={{ minWidth: 30, fontSize: 12, fontWeight: 700, color: T.text, textAlign: "right" }}>{b.count}</div>
+                      </div>
+                    ));
+                  })()}
+                </Section>
+              </div>
+
+              {/* Red Projects Table */}
+              <Section title="Red List Projects" subtitle="Sorted by overage · highest first">
+                <DataTable data={reds} columns={[
+                  { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
+                  { key: "client_name", label: "Client", w: 130, filter: true, style: { fontWeight: 600 } },
+                  { key: "project_name", label: "Assignment", w: 220 },
+                  { key: "ecosystem", label: "Ecosystem", w: 90, filter: true, render: (v) => <span style={{ fontSize: 11, fontWeight: 600, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
+                  { key: "budget_forecast", label: "Budget", w: 90, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
+                  { key: "actuals_display", label: "Actuals", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: v === "No Tracking" ? T.textDim : T.text }}>{typeof v === "number" ? fmtK(v) : v}</span> },
+                  { key: "overage", label: "FTC Overage", w: 100, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: T.red }}>{fmtK(v)}</span> },
+                  { key: "percent_complete", label: "% Done", w: 60, render: (v) => <span style={{ fontSize: 12, color: T.textMuted }}>{pct(v)}</span> },
+                  { key: "request_type", label: "Services", w: 180 },
+                  { key: "project_manager", label: "PM/Prod", w: 110, filter: true },
+                ]} />
+              </Section>
+            </>);
+          })()}
         </>)}
 
         {/* ============ NEW BUSINESS ============ */}
