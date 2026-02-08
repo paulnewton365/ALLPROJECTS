@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.6.2";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -360,7 +360,7 @@ function EcoWinServices({ data, billable }) {
         <span style={{ fontSize: 13, fontWeight: 700, color: ECO_COLORS[eco.ecosystem] || T.textMuted }}>{eco.ecosystem}</span>
         <div style={{ display: "flex", gap: 12 }}>
           <span style={{ fontSize: 11, color: T.textDim }}>{eco.deal_count} deals</span>
-          {eco.avg_win_pct != null && <span style={{ fontSize: 14, fontWeight: 700, color: eco.avg_win_pct >= 50 ? T.green : eco.avg_win_pct >= 25 ? T.yellow : T.red }}>{eco.avg_win_pct}% avg win</span>}
+          {eco.avg_win_pct != null && <span style={{ fontSize: 14, fontWeight: 700, color: eco.avg_win_pct >= 50 ? T.green : eco.avg_win_pct >= 25 ? T.yellow : T.red }}>{eco.avg_win_pct}% Avg Win Potential</span>}
         </div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
