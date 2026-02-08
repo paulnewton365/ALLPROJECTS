@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.6.3";
+const APP_VERSION = "1.7.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -200,42 +200,45 @@ function TrendChart({ history }) {
 // ---------------------------------------------------------------------------
 // Treemap
 // ---------------------------------------------------------------------------
-function EcosystemTreemap({ ecosystems }) {
+function EcosystemRevenueBar({ ecosystems }) {
   if (!ecosystems?.length) return null;
   const total = ecosystems.reduce((a, e) => a + e.budget, 0) || 1;
-  const rows = []; let cur = [], rowB = 0;
-  const target = total / Math.ceil(Math.sqrt(ecosystems.length));
-  for (const eco of ecosystems) { cur.push(eco); rowB += eco.budget; if (rowB >= target) { rows.push({ items: cur, budget: rowB }); cur = []; rowB = 0; } }
-  if (cur.length) rows.push({ items: cur, budget: rowB });
+  const sorted = [...ecosystems].sort((a, b) => b.budget - a.budget);
   return (
-    <div style={{ minHeight: 180 }}>
-      {rows.map((row, ri) => (
-        <div key={ri} style={{ display: "flex", height: `${Math.max((row.budget / total) * 220, 70)}px`, marginBottom: 3 }}>
-          {row.items.map((eco, ci) => {
-            const pctW = row.budget > 0 ? (eco.budget / row.budget) * 100 : 100 / row.items.length;
-            const bg = burnColor(eco.burn_rate);
-            const ryCnt = (eco.rag?.red || 0) + (eco.rag?.yellow || 0);
-            return (
-              <div className="treemap-cell" key={ci} title={`${eco.name}\nBudget: ${fmt(eco.budget)}\nBurn: ${eco.burn_rate}%\nOverage: ${fmt(eco.overage)}`} style={{
-                width: `${pctW}%`, marginRight: 3, borderRadius: 10, background: `linear-gradient(135deg, ${bg}, ${bg}cc)`,
-                padding: "10px 14px", display: "flex", flexDirection: "column", justifyContent: "space-between", cursor: "default", transition: "filter 0.15s", overflow: "hidden",
-              }}>
+    <div>
+      {/* Single bar with vertical slices */}
+      <div style={{ display: "flex", height: 120, borderRadius: 12, overflow: "hidden", marginBottom: 12, border: `1px solid ${T.border}` }}>
+        {sorted.map((eco) => {
+          const pctW = (eco.budget / total) * 100;
+          const color = ECO_COLORS[eco.name] || T.textDim;
+          return (
+            <div key={eco.name} title={`${eco.name}\nBudget: ${fmt(eco.budget)}\nBurn: ${eco.burn_rate}%\nOverage: ${fmt(eco.overage)}`} style={{
+              width: `${pctW}%`, background: color, padding: "12px 10px", display: "flex", flexDirection: "column", justifyContent: "space-between",
+              borderRight: "2px solid rgba(255,255,255,0.4)", cursor: "default", minWidth: pctW > 3 ? 60 : 8, overflow: "hidden",
+            }}>
+              {pctW > 6 ? (<>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{eco.name}</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.4)" }}>{fmtK(eco.budget)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.3)", whiteSpace: "nowrap" }}>{eco.name}</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>{fmtK(eco.budget)}</div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>{eco.burn_rate}% burn</span>
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.75)" }}>{eco.projects}p{ryCnt > 0 ? ` ⚠${ryCnt}` : ""}</span>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>{eco.burn_rate}% burn</span>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.7)" }}>{eco.projects}p</span>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-      <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 10, color: T.textDim }}>
-        {[["≤50%", T.green], ["≤70%", "#6a9e2a"], ["≤85%", T.yellow], ["≤95%", T.orange], [">95%", T.red]].map(([l, c]) => (
-          <span key={l} style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: c, border: `2px solid ${T.bgCard}`, boxShadow: `0 0 0 1px ${c}` }} />{l}</span>
+              </>) : null}
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend with details */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px" }}>
+        {sorted.map((eco) => (
+          <div key={eco.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: ECO_COLORS[eco.name] || T.textDim, flexShrink: 0 }} />
+            <span style={{ fontWeight: 600, color: T.text }}>{eco.name}</span>
+            <span style={{ color: T.textMuted }}>{fmtK(eco.budget)}</span>
+            <span style={{ color: T.textDim }}>({Math.round((eco.budget / total) * 100)}%)</span>
+          </div>
         ))}
       </div>
     </div>
@@ -586,7 +589,7 @@ export default function Dashboard() {
           <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} /></Section>
           <div style={{ height: 16 }} />
           <div className="chart-row" style={s.chartRow}>
-            <Section title="Revenue by Ecosystem" subtitle="Size = budget · Color = burn rate"><EcosystemTreemap ecosystems={liveEcoBillable} /></Section>
+            <Section title="Revenue by Ecosystem" subtitle="Proportional budget · Billable ecosystems"><EcosystemRevenueBar ecosystems={liveEcoBillable} /></Section>
             <Section title="Overservice Exposure" subtitle="FTC · Dashed = investment offset"><DivergingOverservice ecosystems={liveEcoBillable} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
@@ -676,10 +679,10 @@ export default function Dashboard() {
                         let cumAngle = -90;
                         const slices = entries.map(([name, count]) => {
                           const pctVal = count / total;
-                          const angle = pctVal * 360;
+                          const angle = Math.min(pctVal * 360, 359.9);
                           const startRad = (cumAngle * Math.PI) / 180;
                           const endRad = ((cumAngle + angle) * Math.PI) / 180;
-                          cumAngle += angle;
+                          cumAngle += pctVal * 360;
                           const large = angle > 180 ? 1 : 0;
                           const r = 44, cx = 50, cy = 50;
                           const x1 = cx + r * Math.cos(startRad), y1 = cy + r * Math.sin(startRad);
@@ -772,10 +775,10 @@ export default function Dashboard() {
                         let cumAngle = -90;
                         return ecoEntries.map(([name, v], i) => {
                           const pctVal = v.overage / total;
-                          const angle = pctVal * 360;
+                          const angle = Math.min(pctVal * 360, 359.9);
                           const startRad = (cumAngle * Math.PI) / 180;
                           const endRad = ((cumAngle + angle) * Math.PI) / 180;
-                          cumAngle += angle;
+                          cumAngle += pctVal * 360;
                           const large = angle > 180 ? 1 : 0;
                           const r = 65, cx = 80, cy = 80;
                           const x1 = cx + r * Math.cos(startRad), y1 = cy + r * Math.sin(startRad);
