@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.7.4";
+const APP_VERSION = "1.7.5";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -140,6 +140,9 @@ function ExecKPIStrip({ live, newbiz }) {
 // Trend Chart (SVG)
 // ---------------------------------------------------------------------------
 function TrendChart({ history, onLogSnapshot }) {
+  const [logging, setLogging] = useState(false);
+  const handleLog = async () => { if (!onLogSnapshot || logging) return; setLogging(true); try { await onLogSnapshot(); } finally { setLogging(false); } };
+
   if (!history?.length) {
     return <div style={{ color: T.textDim, padding: 20, textAlign: "center", fontSize: 13 }}>Logging first data point...</div>;
   }
@@ -168,7 +171,7 @@ function TrendChart({ history, onLogSnapshot }) {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 11, color: T.textDim }}>Snapshot from {snap.date} — trend lines will appear after additional snapshots</div>
-          {onLogSnapshot && <button onClick={onLogSnapshot} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px" }}>+ Log Snapshot Now</button>}
+          {onLogSnapshot && <button onClick={handleLog} disabled={logging} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px", opacity: logging ? 0.6 : 1 }}>{logging ? "Logging..." : "+ Log Snapshot Now"}</button>}
         </div>
       </div>
     );
@@ -213,7 +216,7 @@ function TrendChart({ history, onLogSnapshot }) {
         <div style={{ display: "flex", gap: 16 }}>
           {metrics.map((m) => <span key={m.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: T.textMuted }}><span style={{ width: 12, height: 3, background: m.color, borderRadius: 2 }} />{m.label}</span>)}
         </div>
-        {onLogSnapshot && <button onClick={onLogSnapshot} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px" }}>+ Log Snapshot</button>}
+        {onLogSnapshot && <button onClick={handleLog} disabled={logging} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px", opacity: logging ? 0.6 : 1 }}>{logging ? "Logging..." : "+ Log Snapshot"}</button>}
       </div>
     </div>
   );
@@ -611,7 +614,13 @@ export default function Dashboard() {
         {tab === "overview" && (<>
           <ExecKPIStrip live={d.live} newbiz={d.newbiz} />
           <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} onLogSnapshot={async () => {
-            try { const r = await fetch("/api/history", { method: "POST" }); const j = await r.json(); if (j.history) setHistory(j.history); } catch (e) { console.error(e); }
+            try {
+              const r = await fetch("/api/history", { method: "POST" });
+              const j = await r.json();
+              if (j.error) { alert("Snapshot error: " + j.error); return; }
+              if (j.history) { setHistory(j.history); alert("Snapshot logged! " + j.history.length + " total data points."); }
+              else if (j.logged) { setHistory((prev) => [...prev.filter((e) => e.date !== j.logged.date), j.logged]); alert("Snapshot logged!"); }
+            } catch (e) { alert("Failed to log snapshot: " + e.message); }
           }} /></Section>
           <div style={{ height: 16 }} />
           <div className="chart-row" style={s.chartRow}>
