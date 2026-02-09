@@ -8,6 +8,8 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
+        <link rel="icon" href="https://fullyconscious.com/favicon.ico" sizes="any" />
+        <link rel="icon" href="https://fullyconscious.com/favicon.ico" type="image/x-icon" />
         <link rel="alternate" type="application/json+oembed" href={`${siteUrl}/api/oembed?url=${encodeURIComponent(siteUrl)}&format=json`} title="Antenna Group Dashboard" />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="Antenna Group — All Projects Dashboard" />

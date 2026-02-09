@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.8.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -298,19 +298,26 @@ function EcosystemRevenueBar({ ecosystems }) {
 // ---------------------------------------------------------------------------
 // Stacked Pipeline
 // ---------------------------------------------------------------------------
-function StackedPipeline({ data, displayNames }) {
-  if (!data?.length) return <div style={{ color: T.textDim, padding: 20 }}>No pipeline data</div>;
-  const maxW = Math.max(...data.map((e) => e.total_weighted), 1);
+function StackedPipeline({ data, displayNames, ensureEcosystems }) {
+  // Ensure all target ecosystems appear even with $0
+  const ecoMap = {};
+  (data || []).forEach((e) => { ecoMap[e.ecosystem] = e; });
+  const allEcos = ensureEcosystems
+    ? ensureEcosystems.map((eco) => ecoMap[eco] || { ecosystem: eco, total_weighted: 0, total_forecast: 0, stages: [] })
+    : data || [];
+  if (!allEcos.length) return <div style={{ color: T.textDim, padding: 20 }}>No pipeline data</div>;
+  const maxW = Math.max(...allEcos.map((e) => e.total_weighted), 1);
   return (
     <div>
-      {data.map((eco) => (
-        <div key={eco.ecosystem} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+      {allEcos.map((eco) => (
+        <div key={eco.ecosystem} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
           <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco.ecosystem] || T.textMuted }}>{eco.ecosystem}</div>
-          <div style={{ flex: 1, height: 28, background: T.bgHover, borderRadius: 6, overflow: "hidden", display: "flex" }}>
+          <div style={{ flex: 1, height: 36, background: T.bgHover, borderRadius: 6, overflow: "hidden", display: "flex" }}>
             {eco.stages.filter((st) => st.weighted > 0).map((st) => {
               const sn = stageName(st.stage, displayNames);
-              return <div key={st.stage} title={`${sn}: ${st.count} deals, ${fmtK(st.weighted)} wtd`} style={{ width: `${(st.weighted / maxW) * 100}%`, background: STAGE_COLORS[sn] || T.textDim, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff", minWidth: 4, borderRight: "1px solid rgba(255,255,255,0.3)" }}>{(st.weighted / maxW) * 100 > 8 ? st.count : ""}</div>;
+              return <div key={st.stage} title={`${sn}: ${st.count} deals, ${fmtK(st.weighted)} wtd`} style={{ width: `${(st.weighted / maxW) * 100}%`, background: STAGE_COLORS[sn] || T.textDim, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", minWidth: 4, borderRight: "1px solid rgba(255,255,255,0.3)" }}>{(st.weighted / maxW) * 100 > 8 ? st.count : ""}</div>;
             })}
+            {eco.total_weighted === 0 && <div style={{ display: "flex", alignItems: "center", paddingLeft: 10, fontSize: 10, color: T.textDim }}>No active pipeline</div>}
           </div>
           <div style={{ textAlign: "right", minWidth: 80 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{fmtK(eco.total_weighted)}</div>
@@ -365,7 +372,7 @@ function DivergingOverservice({ ecosystems }) {
 // ---------------------------------------------------------------------------
 // Bubble Matrix
 // ---------------------------------------------------------------------------
-function BubbleMatrix({ matrix, billable }) {
+function BubbleMatrix({ matrix, billable, totalProjects }) {
   if (!matrix?.ecosystems?.length) return <div style={{ color: T.textDim, padding: 20 }}>No data</div>;
   const lower = (billable || []).map((e) => e.toLowerCase());
   const ecoIdxs = matrix.ecosystems.map((e, i) => ({ name: e, idx: i })).filter((e) => lower.some((b) => e.name.toLowerCase().includes(b)));
@@ -374,6 +381,7 @@ function BubbleMatrix({ matrix, billable }) {
   const topRT = rtTotals.filter((r) => r.total > 0).slice(0, 10);
   const maxCount = Math.max(...ecoIdxs.flatMap((e) => topRT.map((rt) => matrix.cells[e.idx][rt.idx].count)), 1);
   const maxBudget = Math.max(...ecoIdxs.flatMap((e) => topRT.map((rt) => matrix.cells[e.idx][rt.idx].budget)), 1);
+  const projTotal = totalProjects || ecoIdxs.reduce((sum, e) => sum + topRT.reduce((s, rt) => s + matrix.cells[e.idx][rt.idx].count, 0), 0) || 1;
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -381,7 +389,8 @@ function BubbleMatrix({ matrix, billable }) {
           <th style={{ ...s.matrixTh, textAlign: "left", width: 100 }}>Ecosystem</th>
           {topRT.map((rt) => <th key={rt.name} style={s.matrixTh} title={rt.name}><div style={{ transform: "rotate(-45deg)", transformOrigin: "left bottom", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, color: T.textMuted }}>{rt.name.length > 14 ? rt.name.slice(0, 12) + "…" : rt.name}</div></th>)}
         </tr></thead>
-        <tbody>{ecoIdxs.map((eco) => (
+        <tbody>
+          {ecoIdxs.map((eco) => (
           <tr key={eco.name}>
             <td style={{ padding: "6px 8px", fontSize: 12, fontWeight: 600, borderBottom: `1px solid ${T.border}`, color: ECO_COLORS[eco.name] || T.textMuted }}>{eco.name}</td>
             {topRT.map((rt) => {
@@ -395,7 +404,15 @@ function BubbleMatrix({ matrix, billable }) {
               </td>;
             })}
           </tr>
-        ))}</tbody>
+          ))}
+          <tr>
+            <td style={{ padding: "8px 8px", fontSize: 10, fontWeight: 700, color: T.textDim, borderTop: `2px solid ${T.borderDark}` }}>% of Projects</td>
+            {topRT.map((rt) => {
+              const pctVal = Math.round((rt.total / projTotal) * 100);
+              return <td key={rt.name} style={{ padding: "8px 4px", textAlign: "center", fontSize: 11, fontWeight: 700, color: pctVal >= 20 ? T.text : T.textMuted, borderTop: `2px solid ${T.borderDark}` }}>{pctVal}%</td>;
+            })}
+          </tr>
+        </tbody>
       </table>
     </div>
   );
@@ -648,8 +665,8 @@ export default function Dashboard() {
             <Section title="Overservice Exposure" subtitle="FTC · Dashed = investment offset"><DivergingOverservice ecosystems={liveEcoBillable} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
-            <Section title="Weighted Pipeline by Ecosystem" subtitle="Stacked by stage"><StackedPipeline data={nbEcoPipeline} displayNames={dn} /></Section>
-            <Section title="Service Mix by Ecosystem" subtitle="Size = projects · Opacity = budget"><BubbleMatrix matrix={d.live.ecosystem_request_type} billable={billable} /></Section>
+            <Section title="Weighted Pipeline by Ecosystem" subtitle="Stacked by stage"><StackedPipeline data={nbEcoPipeline} displayNames={dn} ensureEcosystems={pipelineEcos} /></Section>
+            <Section title="Service Mix by Ecosystem" subtitle="Size = projects · Opacity = budget"><BubbleMatrix matrix={d.live.ecosystem_request_type} billable={billable} totalProjects={liveProjectsBillable.length} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Top Priority Projects" subtitle="Ordered by budget">
@@ -952,7 +969,7 @@ export default function Dashboard() {
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Pipeline by Stage"><PipelineFunnel funnel={d.newbiz.pipeline_funnel} displayNames={dn} /></Section>
-            <Section title="Weighted Pipeline by Ecosystem" subtitle="Climate · Health · Real Estate · Public Affairs"><StackedPipeline data={nbEcoPipeline} displayNames={dn} /></Section>
+            <Section title="Weighted Pipeline by Ecosystem" subtitle="Climate · Health · Real Estate · Public Affairs"><StackedPipeline data={nbEcoPipeline} displayNames={dn} ensureEcosystems={pipelineEcos} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Qualification Recommendation" subtitle="% of pipeline">{(() => { const total = Object.values(d.newbiz.by_recommendation).reduce((a, b) => a + b, 0) || 1; return (<>
