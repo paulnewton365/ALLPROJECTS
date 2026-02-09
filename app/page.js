@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.7.3";
+const APP_VERSION = "1.7.4";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -139,20 +139,43 @@ function ExecKPIStrip({ live, newbiz }) {
 // ---------------------------------------------------------------------------
 // Trend Chart (SVG)
 // ---------------------------------------------------------------------------
-function TrendChart({ history }) {
-  if (!history?.length || history.length < 2) {
-    return <div style={{ color: T.textDim, padding: 20, textAlign: "center", fontSize: 13 }}>
-      {history?.length === 1 ? "First data point logged. Trend chart will appear after next week's snapshot." : "Logging first data point..."}
-    </div>;
+function TrendChart({ history, onLogSnapshot }) {
+  if (!history?.length) {
+    return <div style={{ color: T.textDim, padding: 20, textAlign: "center", fontSize: 13 }}>Logging first data point...</div>;
   }
 
-  const W = 680, H = 180, PX = 50, PY = 20;
   const metrics = [
     { key: "live_revenue", label: "Live Revenue", color: T.text },
     { key: "net_overservice", label: "Net Overservice", color: T.red },
     { key: "weighted_pipeline", label: "Wtd Pipeline", color: T.orange },
   ];
 
+  // Single data point — show current snapshot as metric cards
+  if (history.length === 1) {
+    const snap = history[0];
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 14, marginBottom: 12 }}>
+          {metrics.map((m) => {
+            const val = snap[m.key] || 0;
+            return (
+              <div key={m.key} style={{ flex: 1, padding: "14px 16px", background: T.bgHover, borderRadius: 8, border: `1px solid ${T.border}`, borderLeft: `4px solid ${m.color}` }}>
+                <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 4 }}>{m.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: m.color }}>{fmtK(val)}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 11, color: T.textDim }}>Snapshot from {snap.date} — trend lines will appear after additional snapshots</div>
+          {onLogSnapshot && <button onClick={onLogSnapshot} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px" }}>+ Log Snapshot Now</button>}
+        </div>
+      </div>
+    );
+  }
+
+  // 2+ points — show line chart
+  const W = 680, H = 180, PX = 50, PY = 20;
   const allVals = history.flatMap((h) => metrics.map((m) => h[m.key] || 0));
   const minV = Math.min(...allVals, 0);
   const maxV = Math.max(...allVals, 1);
@@ -162,36 +185,35 @@ function TrendChart({ history }) {
   const yScale = (v) => PY + (H - PY * 2) * (1 - (v - minV) / range);
 
   return (
-    <div style={{ overflowX: "auto" }}>
-      <svg width={W} height={H + 30} style={{ display: "block" }}>
-        {/* Zero line if range crosses zero */}
-        {minV < 0 && maxV > 0 && <line x1={PX} x2={W - PX} y1={yScale(0)} y2={yScale(0)} stroke={T.border} strokeDasharray="4,4" />}
-        {/* Grid lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-          const y = PY + (H - PY * 2) * (1 - f);
-          const val = minV + range * f;
-          return <g key={f}><line x1={PX} x2={W - PX} y1={y} y2={y} stroke={T.border} strokeWidth={0.5} /><text x={PX - 6} y={y + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{fmtK(val)}</text></g>;
-        })}
-        {/* Lines */}
-        {metrics.map((m) => {
-          const points = history.map((h, i) => `${PX + i * xStep},${yScale(h[m.key] || 0)}`).join(" ");
-          return <polyline key={m.key} points={points} fill="none" stroke={m.color} strokeWidth={2} />;
-        })}
-        {/* Dots on last point */}
-        {metrics.map((m) => {
-          const last = history[history.length - 1];
-          const x = PX + (history.length - 1) * xStep;
-          const y = yScale(last[m.key] || 0);
-          return <circle key={m.key + "-dot"} cx={x} cy={y} r={4} fill={m.color} />;
-        })}
-        {/* X axis labels */}
-        {history.map((h, i) => {
-          if (history.length > 8 && i % Math.ceil(history.length / 8) !== 0 && i !== history.length - 1) return null;
-          return <text key={i} x={PX + i * xStep} y={H + 10} textAnchor="middle" fontSize={9} fill={T.textDim}>{h.date.slice(5)}</text>;
-        })}
-      </svg>
-      <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 4 }}>
-        {metrics.map((m) => <span key={m.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: T.textMuted }}><span style={{ width: 12, height: 3, background: m.color, borderRadius: 2 }} />{m.label}</span>)}
+    <div>
+      <div style={{ overflowX: "auto" }}>
+        <svg width={W} height={H + 30} style={{ display: "block" }}>
+          {minV < 0 && maxV > 0 && <line x1={PX} x2={W - PX} y1={yScale(0)} y2={yScale(0)} stroke={T.border} strokeDasharray="4,4" />}
+          {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+            const y = PY + (H - PY * 2) * (1 - f);
+            const val = minV + range * f;
+            return <g key={f}><line x1={PX} x2={W - PX} y1={y} y2={y} stroke={T.border} strokeWidth={0.5} /><text x={PX - 6} y={y + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{fmtK(val)}</text></g>;
+          })}
+          {metrics.map((m) => {
+            const points = history.map((h, i) => `${PX + i * xStep},${yScale(h[m.key] || 0)}`).join(" ");
+            return <polyline key={m.key} points={points} fill="none" stroke={m.color} strokeWidth={2} />;
+          })}
+          {metrics.map((m) => history.map((h, i) => {
+            const x = PX + i * xStep;
+            const y = yScale(h[m.key] || 0);
+            return <circle key={`${m.key}-${i}`} cx={x} cy={y} r={3} fill={m.color} />;
+          }))}
+          {history.map((h, i) => {
+            if (history.length > 8 && i % Math.ceil(history.length / 8) !== 0 && i !== history.length - 1) return null;
+            return <text key={i} x={PX + i * xStep} y={H + 10} textAnchor="middle" fontSize={9} fill={T.textDim}>{h.date.slice(5)}</text>;
+          })}
+        </svg>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 16 }}>
+          {metrics.map((m) => <span key={m.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: T.textMuted }}><span style={{ width: 12, height: 3, background: m.color, borderRadius: 2 }} />{m.label}</span>)}
+        </div>
+        {onLogSnapshot && <button onClick={onLogSnapshot} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px" }}>+ Log Snapshot</button>}
       </div>
     </div>
   );
@@ -588,7 +610,9 @@ export default function Dashboard() {
         {/* ============ EXECUTIVE OVERVIEW ============ */}
         {tab === "overview" && (<>
           <ExecKPIStrip live={d.live} newbiz={d.newbiz} />
-          <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} /></Section>
+          <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} onLogSnapshot={async () => {
+            try { const r = await fetch("/api/history", { method: "POST" }); const j = await r.json(); if (j.history) setHistory(j.history); } catch (e) { console.error(e); }
+          }} /></Section>
           <div style={{ height: 16 }} />
           <div className="chart-row" style={s.chartRow}>
             <Section title="Revenue by Ecosystem" subtitle="Proportional budget · Billable ecosystems"><EcosystemRevenueBar ecosystems={liveEcoBillable} /></Section>

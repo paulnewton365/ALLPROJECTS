@@ -28,7 +28,7 @@ export async function POST() {
       burn_rate: snapshot.live.financials.burn_rate_pct,
     };
     const history = await appendHistory(entry);
-    return Response.json({ logged: entry, total_entries: history.length });
+    return Response.json({ logged: entry, history, total_entries: history.length });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
