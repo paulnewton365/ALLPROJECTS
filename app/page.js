@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.7.6";
+const APP_VERSION = "1.8.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -86,8 +86,16 @@ function Tabs({ tabs, active, onChange }) {
   );
 }
 
-function RAGBar({ status }) {
+function RAGBar({ status, projects }) {
   const total = Object.values(status).reduce((a, b) => a + b, 0);
+  const targetEcos = ["Climate", "Real Estate", "Health", "Public Affairs"];
+  const redByEco = {};
+  if (projects) {
+    projects.filter((p) => p.rag_color === "red").forEach((p) => {
+      const eco = p.ecosystem || "Other";
+      if (targetEcos.includes(eco)) redByEco[eco] = (redByEco[eco] || 0) + 1;
+    });
+  }
   return (
     <div style={{ display: "flex", gap: 24, marginBottom: 20, background: T.bgCard, borderRadius: 12, padding: 16, border: `1px solid ${T.border}`, flexWrap: "wrap", alignItems: "center" }}>
       {["green", "yellow", "red", "blue"].map((k) => !status[k] ? null : (
@@ -96,7 +104,19 @@ function RAGBar({ status }) {
           <div><div style={{ fontSize: 22, fontWeight: 800 }}>{status[k]}</div><div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.5 }}>{RAG[k].label}</div></div>
         </div>
       ))}
-      <div style={{ marginLeft: "auto", fontSize: 12, color: T.textDim }}>{total} projects</div>
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16 }}>
+        {targetEcos.map((eco) => {
+          const count = redByEco[eco] || 0;
+          return count > 0 ? (
+            <div key={eco} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: T.textMuted }}>{eco}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: T.red }}>{count}</span>
+            </div>
+          ) : null;
+        })}
+        <div style={{ fontSize: 12, color: T.textDim, borderLeft: `1px solid ${T.border}`, paddingLeft: 12 }}>{total} projects</div>
+      </div>
     </div>
   );
 }
@@ -114,21 +134,31 @@ function KPI({ label, value, detail, color }) {
 // ---------------------------------------------------------------------------
 // Exec KPI Strip
 // ---------------------------------------------------------------------------
-function ExecKPIStrip({ live, newbiz }) {
+function ExecKPIStrip({ live, newbiz, history }) {
   const net = live.financials.total_overage - live.financials.total_investment;
   const woc = newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract") || { forecast: 0, count: 0 };
+  // Previous snapshot for trend arrows
+  const prev = history?.length >= 2 ? history[history.length - 2] : null;
+  const trendArrow = (current, prevVal, invertColor) => {
+    if (prev == null || prevVal == null) return null;
+    const diff = current - prevVal;
+    if (Math.abs(diff) < 1) return null;
+    const up = diff > 0;
+    const color = invertColor ? (up ? T.red : T.green) : (up ? T.green : T.red);
+    return <span style={{ fontSize: 10, fontWeight: 700, color, marginLeft: 4 }}>{up ? "▲" : "▼"} {fmtK(Math.abs(diff))}</span>;
+  };
   return (
     <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
       {[
-        { label: "Live Revenue", value: fmtK(live.financials.total_budget), color: T.text, sub: `${live.count} projects` },
-        { label: "Burn Rate", value: `${live.financials.burn_rate_pct}%`, color: burnColor(live.financials.burn_rate_pct), sub: `${fmtK(live.financials.total_actuals)} spent` },
-        { label: "Net Overservice", value: fmtK(net), color: net > 0 ? T.red : T.green, sub: `${live.financials.overserviced_count} projects (${fmtK(live.financials.total_investment)} invested)` },
-        { label: "Weighted Pipeline", value: fmtK(newbiz.weighted_pipeline), color: T.orange, sub: `${fmtK(newbiz.total_forecast)} unweighted` },
-        { label: "Near Close", value: fmtK(woc.forecast), color: T.green, sub: `${woc.count} deals working on contract` },
+        { label: "Live Revenue", value: fmtK(live.financials.total_budget), color: T.text, sub: `${live.count} projects`, trend: trendArrow(live.financials.total_budget, prev?.live_revenue, false) },
+        { label: "Burn Rate", value: `${live.financials.burn_rate_pct}%`, color: burnColor(live.financials.burn_rate_pct), sub: `${fmtK(live.financials.total_actuals)} spent`, trend: prev ? (() => { const diff = live.financials.burn_rate_pct - prev.burn_rate; if (Math.abs(diff) < 0.1) return null; const up = diff > 0; return <span style={{ fontSize: 10, fontWeight: 700, color: up ? T.red : T.green, marginLeft: 4 }}>{up ? "▲" : "▼"} {Math.abs(diff).toFixed(1)}%</span>; })() : null },
+        { label: "Net Overservice", value: fmtK(net), color: net > 0 ? T.red : T.green, sub: `${live.financials.overserviced_count} projects (${fmtK(live.financials.total_investment)} invested)`, trend: trendArrow(net, prev?.net_overservice, true) },
+        { label: "Weighted Pipeline", value: fmtK(newbiz.weighted_pipeline), color: T.orange, sub: `${fmtK(newbiz.total_forecast)} unweighted`, trend: trendArrow(newbiz.weighted_pipeline, prev?.weighted_pipeline, false) },
+        { label: "Near Close", value: fmtK(woc.forecast), color: T.green, sub: `${woc.count} deals working on contract`, trend: null },
       ].map((kpi) => (
         <div key={kpi.label} style={s.execKpi}>
           <div style={s.execLabel}>{kpi.label}</div>
-          <div style={{ ...s.execValue, color: kpi.color }}>{kpi.value}</div>
+          <div style={{ ...s.execValue, color: kpi.color }}>{kpi.value}{kpi.trend}</div>
           <div style={s.execSub}>{kpi.sub}</div>
         </div>
       ))}
@@ -139,18 +169,15 @@ function ExecKPIStrip({ live, newbiz }) {
 // ---------------------------------------------------------------------------
 // Trend Chart (SVG)
 // ---------------------------------------------------------------------------
-function TrendChart({ history, onLogSnapshot }) {
-  const [logging, setLogging] = useState(false);
-  const handleLog = async () => { if (!onLogSnapshot || logging) return; setLogging(true); try { await onLogSnapshot(); } finally { setLogging(false); } };
-
+function TrendChart({ history }) {
   if (!history?.length) {
     return <div style={{ color: T.textDim, padding: 20, textAlign: "center", fontSize: 13 }}>Logging first data point...</div>;
   }
 
   const metrics = [
     { key: "live_revenue", label: "Live Revenue", color: T.text },
-    { key: "net_overservice", label: "Net Overservice", color: T.red },
-    { key: "weighted_pipeline", label: "Wtd Pipeline", color: T.orange },
+    { key: "net_overservice", label: "Net Overservice", color: "#c93c3c" },
+    { key: "weighted_pipeline", label: "Wtd Pipeline", color: "#3b73c4" },
   ];
 
   // Single data point — show current snapshot as metric cards
@@ -169,54 +196,52 @@ function TrendChart({ history, onLogSnapshot }) {
             );
           })}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 11, color: T.textDim }}>Snapshot from {snap.date} — trend lines will appear after additional snapshots</div>
-          {onLogSnapshot && <button onClick={handleLog} disabled={logging} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px", opacity: logging ? 0.6 : 1 }}>{logging ? "Logging..." : "+ Log Snapshot Now"}</button>}
-        </div>
+        <div style={{ fontSize: 10, color: T.textDim, textAlign: "right" }}>Snapshot from {snap.date} · Next snapshot: Sunday 11pm EST</div>
       </div>
     );
   }
 
-  // 2+ points — show line chart
-  const W = 680, H = 180, PX = 50, PY = 20;
+  // 2+ points — full-width line chart
+  const H = 200, PX = 50, PY = 20;
   const allVals = history.flatMap((h) => metrics.map((m) => h[m.key] || 0));
   const minV = Math.min(...allVals, 0);
   const maxV = Math.max(...allVals, 1);
   const range = maxV - minV || 1;
-
-  const xStep = history.length > 1 ? (W - PX * 2) / (history.length - 1) : 0;
   const yScale = (v) => PY + (H - PY * 2) * (1 - (v - minV) / range);
 
   return (
     <div>
       <div style={{ overflowX: "auto" }}>
-        <svg width={W} height={H + 30} style={{ display: "block" }}>
-          {minV < 0 && maxV > 0 && <line x1={PX} x2={W - PX} y1={yScale(0)} y2={yScale(0)} stroke={T.border} strokeDasharray="4,4" />}
+        <svg width="100%" viewBox={`0 0 900 ${H + 30}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+          {minV < 0 && maxV > 0 && <line x1={PX} x2={900 - PX} y1={yScale(0)} y2={yScale(0)} stroke={T.border} strokeDasharray="4,4" />}
           {[0, 0.25, 0.5, 0.75, 1].map((f) => {
             const y = PY + (H - PY * 2) * (1 - f);
             const val = minV + range * f;
-            return <g key={f}><line x1={PX} x2={W - PX} y1={y} y2={y} stroke={T.border} strokeWidth={0.5} /><text x={PX - 6} y={y + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{fmtK(val)}</text></g>;
+            return <g key={f}><line x1={PX} x2={900 - PX} y1={y} y2={y} stroke={T.border} strokeWidth={0.5} /><text x={PX - 6} y={y + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{fmtK(val)}</text></g>;
           })}
-          {metrics.map((m) => {
-            const points = history.map((h, i) => `${PX + i * xStep},${yScale(h[m.key] || 0)}`).join(" ");
-            return <polyline key={m.key} points={points} fill="none" stroke={m.color} strokeWidth={2} />;
-          })}
-          {metrics.map((m) => history.map((h, i) => {
-            const x = PX + i * xStep;
-            const y = yScale(h[m.key] || 0);
-            return <circle key={`${m.key}-${i}`} cx={x} cy={y} r={3} fill={m.color} />;
-          }))}
-          {history.map((h, i) => {
-            if (history.length > 8 && i % Math.ceil(history.length / 8) !== 0 && i !== history.length - 1) return null;
-            return <text key={i} x={PX + i * xStep} y={H + 10} textAnchor="middle" fontSize={9} fill={T.textDim}>{h.date.slice(5)}</text>;
-          })}
+          {(() => {
+            const xStep = history.length > 1 ? (900 - PX * 2) / (history.length - 1) : 0;
+            return (<>
+              {metrics.map((m) => {
+                const points = history.map((h, i) => `${PX + i * xStep},${yScale(h[m.key] || 0)}`).join(" ");
+                return <polyline key={m.key} points={points} fill="none" stroke={m.color} strokeWidth={2.5} />;
+              })}
+              {metrics.map((m) => history.map((h, i) => (
+                <circle key={`${m.key}-${i}`} cx={PX + i * xStep} cy={yScale(h[m.key] || 0)} r={4} fill={m.color} />
+              )))}
+              {history.map((h, i) => {
+                if (history.length > 10 && i % Math.ceil(history.length / 10) !== 0 && i !== history.length - 1) return null;
+                return <text key={i} x={PX + i * xStep} y={H + 12} textAnchor="middle" fontSize={9} fill={T.textDim}>{h.date.slice(5)}</text>;
+              })}
+            </>);
+          })()}
         </svg>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
         <div style={{ display: "flex", gap: 16 }}>
           {metrics.map((m) => <span key={m.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: T.textMuted }}><span style={{ width: 12, height: 3, background: m.color, borderRadius: 2 }} />{m.label}</span>)}
         </div>
-        {onLogSnapshot && <button onClick={handleLog} disabled={logging} style={{ ...s.accentBtn, fontSize: 11, padding: "4px 12px", opacity: logging ? 0.6 : 1 }}>{logging ? "Logging..." : "+ Log Snapshot"}</button>}
+        <div style={{ fontSize: 10, color: T.textDim }}>Next snapshot: Sunday 11pm EST</div>
       </div>
     </div>
   );
@@ -612,16 +637,8 @@ export default function Dashboard() {
 
         {/* ============ EXECUTIVE OVERVIEW ============ */}
         {tab === "overview" && (<>
-          <ExecKPIStrip live={d.live} newbiz={d.newbiz} />
-          <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} onLogSnapshot={async () => {
-            try {
-              const r = await fetch("/api/history", { method: "POST" });
-              const j = await r.json();
-              if (j.error) { alert("Snapshot error: " + j.error); return; }
-              if (j.history) { setHistory(j.history); alert("Snapshot logged! " + j.history.length + " total data points."); }
-              else if (j.logged) { setHistory((prev) => [...prev.filter((e) => e.date !== j.logged.date), j.logged]); alert("Snapshot logged!"); }
-            } catch (e) { alert("Failed to log snapshot: " + e.message); }
-          }} /></Section>
+          <ExecKPIStrip live={d.live} newbiz={d.newbiz} history={history} />
+          <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} /></Section>
           <div style={{ height: 16 }} />
           <div className="chart-row" style={s.chartRow}>
             <Section title="Revenue by Ecosystem" subtitle="Proportional budget · Billable ecosystems"><EcosystemRevenueBar ecosystems={liveEcoBillable} /></Section>
@@ -659,7 +676,7 @@ export default function Dashboard() {
 
         {/* ============ LIVE WORK ============ */}
         {tab === "live" && (<>
-          <RAGBar status={d.live.status} />
+          <RAGBar status={d.live.status} projects={d.live.projects} />
           <div className="kpi-grid" style={s.kpiGrid}>
             <KPI label="Total Budget" value={fmtK(d.live.financials.total_budget)} />
             <KPI label="Actuals" value={fmtK(d.live.financials.total_actuals)} detail={`${d.live.financials.tracked_projects} tracked`} />
@@ -1021,7 +1038,10 @@ export default function Dashboard() {
             { key: "project_name", label: "Assignment", w: 250 },
             { key: "category", label: "Category", w: 160, filter: true },
             { key: "approved_investment", label: "Approved Investment", w: 120, fmt: fmtK, style: { fontFamily: "monospace" } },
-            { key: "actuals_display", label: "Actuals", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: v === "No Tracking" ? T.textDim : T.text }}>{typeof v === "number" ? fmtK(v) : v}</span> },
+            { key: "actuals_display", label: "Actuals", w: 90, render: (v, p) => {
+              const over = typeof v === "number" && p.approved_investment > 0 && v > p.approved_investment;
+              return <span style={{ fontFamily: "monospace", fontSize: 12, color: v === "No Tracking" ? T.textDim : over ? T.red : T.text, fontWeight: over ? 700 : 400 }}>{typeof v === "number" ? fmtK(v) : v}{over ? " ⚠" : ""}</span>;
+            } },
             { key: "percent_complete", label: "% Done", w: 70, render: (v) => <span style={{ fontSize: 12, color: T.textMuted }}>{pct(v)}</span> },
             { key: "project_manager", label: "PM/Prod", w: 120, filter: true },
           ]} /></Section>
