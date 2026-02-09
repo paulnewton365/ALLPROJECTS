@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.8.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -31,7 +31,7 @@ const GLOBAL_CSS = `
 // Helpers
 // ---------------------------------------------------------------------------
 const fmt = (n) => "$" + Math.round(Number(n) || 0).toLocaleString();
-const fmtK = (n) => { n = Number(n) || 0; return n >= 1000000 ? "$" + (n / 1000000).toFixed(1) + "M" : n >= 1000 ? "$" + (n / 1000).toFixed(0) + "K" : fmt(n); };
+const fmtK = (n) => { n = Number(n) || 0; const abs = Math.abs(n); const sign = n < 0 ? "-" : ""; return abs >= 1000000 ? sign + "$" + (abs / 1000000).toFixed(1) + "M" : abs >= 1000 ? sign + "$" + (abs / 1000).toFixed(0) + "K" : sign + "$" + Math.round(abs).toLocaleString(); };
 const pct = (n) => n != null && !isNaN(n) ? `${Math.round(n)}%` : "-";
 
 const RAG = {
@@ -450,13 +450,16 @@ function BarChart({ data, labelKey, valueKey, color = T.blue, formatValue, limit
     <div key={i} style={s.barRow}><div style={s.barLabel}>{item[labelKey]}</div><div style={s.barTrack}><div style={{ ...s.barFill, width: `${Math.min((Math.abs(val) / max) * 100, 100)}%`, background: typeof color === "function" ? color(item) : color }} /></div><div style={{ ...s.barValue, color: val < 0 ? T.green : val > 0 && item.overserviced > 0 ? T.red : T.text }}>{formatValue ? formatValue(val, item) : val}</div></div>); })}</div>);
 }
 
-function PillChart({ data, colorMap }) {
+function PillChart({ data, colorMap, order, labelMap }) {
   const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
   const cols = [T.blue, T.purple, T.pink, T.orange, T.green, T.textDim, T.red, T.teal];
-  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const entries = order
+    ? order.map((k) => [k, data[k] || 0]).filter(([, c]) => c > 0)
+    : Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const label = (k) => labelMap?.[k] || k;
   return (<div>
-    <div style={{ display: "flex", height: 22, borderRadius: 6, overflow: "hidden", marginBottom: 8 }}>{entries.map(([k, c], i) => <div key={k} style={{ width: `${(c / total) * 100}%`, background: colorMap?.[k] || cols[i % cols.length], minWidth: c > 0 ? 3 : 0 }} title={`${k}: ${c}`} />)}</div>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>{entries.map(([k, c], i) => <div key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}><div style={{ width: 8, height: 8, borderRadius: 3, background: colorMap?.[k] || cols[i % cols.length] }} /><span style={{ color: T.textMuted }}>{k}</span><span style={{ fontWeight: 600 }}>{c}</span></div>)}</div>
+    <div style={{ display: "flex", height: 22, borderRadius: 6, overflow: "hidden", marginBottom: 8 }}>{entries.map(([k, c], i) => <div key={k} style={{ width: `${(c / total) * 100}%`, background: colorMap?.[k] || cols[i % cols.length], minWidth: c > 0 ? 3 : 0 }} title={`${label(k)}: ${c}`} />)}</div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>{entries.map(([k, c], i) => <div key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}><div style={{ width: 8, height: 8, borderRadius: 3, background: colorMap?.[k] || cols[i % cols.length] }} /><span style={{ color: T.textMuted }}>{label(k)}</span><span style={{ fontWeight: 600 }}>{c}</span></div>)}</div>
   </div>);
 }
 
@@ -706,7 +709,7 @@ export default function Dashboard() {
               </div>) : <div style={{ color: T.textDim }}>No underservice accounts</div>; })()}</Section>
             <Section title="Budget by Client (Top 12)"><BarChart data={d.live.by_client} labelKey="name" valueKey="budget" color={T.blue} formatValue={fmtK} /></Section>
           </div>
-          <Section title="Work Progress"><PillChart data={d.live.work_progress} /></Section>
+          <Section title="Aggregate Project Progress View" subtitle="How far through the work are we"><PillChart data={d.live.work_progress} order={["Empty", "Quarter", "Half", "Three Quarter", "Full"]} labelMap={{ "Full": "Complete" }} /></Section>
           <div style={{ height: 16 }} />
           <Section title="Client Archetypes by Ecosystem" subtitle="FIT classification across Climate · Real Estate · Public Affairs · Health">
               {(() => {
@@ -785,7 +788,7 @@ export default function Dashboard() {
         {/* ============ RED LIST ============ */}
         {tab === "redlist" && (<>
           {(() => {
-            const reds = d.live.projects.filter((p) => p.rag_color === "red").sort((a, b) => b.overage - a.overage);
+            const reds = d.live.projects.filter((p) => p.rag_color === "red").sort((a, b) => (b.overage || 0) - (a.overage || 0));
             const totalOverage = reds.reduce((sum, p) => sum + (p.overage || 0), 0);
             const totalBudget = reds.reduce((sum, p) => sum + (p.budget_forecast || 0), 0);
             const totalActuals = reds.reduce((sum, p) => sum + (typeof p.actuals_display === "number" ? p.actuals_display : 0), 0);
