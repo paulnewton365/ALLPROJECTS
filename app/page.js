@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.4";
+const APP_VERSION = "1.8.5";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -806,19 +806,21 @@ export default function Dashboard() {
         {tab === "redlist" && (<>
           {(() => {
             const reds = d.live.projects.filter((p) => p.rag_color === "red").sort((a, b) => (b.overage || 0) - (a.overage || 0));
+            const coreReds = reds.filter((p) => p.category === "Active Live Projects");
+            const supportReds = reds.filter((p) => p.category === "Active Support" || p.category === "Active Web Warranty");
             const totalOverage = reds.reduce((sum, p) => sum + (p.overage || 0), 0);
             const totalBudget = reds.reduce((sum, p) => sum + (p.budget_forecast || 0), 0);
             const totalActuals = reds.reduce((sum, p) => sum + (typeof p.actuals_display === "number" ? p.actuals_display : 0), 0);
 
-            // By ecosystem
-            const byEco = {}; reds.forEach((p) => { const e = p.ecosystem || "Unassigned"; byEco[e] = byEco[e] || { count: 0, overage: 0, budget: 0 }; byEco[e].count++; byEco[e].overage += p.overage || 0; byEco[e].budget += p.budget_forecast || 0; });
+            // By ecosystem (core projects only)
+            const byEco = {}; coreReds.forEach((p) => { const e = p.ecosystem || "Unassigned"; byEco[e] = byEco[e] || { count: 0, overage: 0, budget: 0 }; byEco[e].count++; byEco[e].overage += p.overage || 0; byEco[e].budget += p.budget_forecast || 0; });
             const ecoEntries = Object.entries(byEco).sort((a, b) => b[1].overage - a[1].overage);
 
-            // By client
+            // By client (all reds)
             const byClient = {}; reds.forEach((p) => { const c = p.client_name || "Unknown"; byClient[c] = byClient[c] || { count: 0, overage: 0 }; byClient[c].count++; byClient[c].overage += p.overage || 0; });
             const clientEntries = Object.entries(byClient).sort((a, b) => b[1].overage - a[1].overage);
 
-            // By service type
+            // By service type (all reds)
             const bySvc = {}; reds.forEach((p) => { const svc = p.request_type || "Unspecified"; svc.split(",").map((s) => s.trim()).filter(Boolean).forEach((s) => { bySvc[s] = (bySvc[s] || 0) + 1; }); });
             const svcEntries = Object.entries(bySvc).sort((a, b) => b[1] - a[1]);
 
@@ -836,9 +838,25 @@ export default function Dashboard() {
                 <div style={s.execKpi}><div style={s.execLabel}>Avg Overage</div><div style={{ ...s.execValue, color: T.red }}>{fmtK(totalOverage / reds.length)}</div><div style={s.execSub}>per red project</div></div>
               </div>
 
+              {/* Support / Web Warranty callout */}
+              {supportReds.length > 0 && (
+                <div style={{ marginBottom: 20, padding: "14px 18px", background: "#fff8e1", borderRadius: 10, border: `1px solid #ffe082`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Support & Web Warranty</div>
+                    <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                      {supportReds.length} red project{supportReds.length !== 1 ? "s" : ""} outside core ecosystems — {supportReds.filter((p) => p.category === "Active Support").length} Support, {supportReds.filter((p) => p.category === "Active Web Warranty").length} Web Warranty
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: T.red }}>{fmtK(supportReds.reduce((sum, p) => sum + (p.overage || 0), 0))}</div>
+                    <div style={{ fontSize: 10, color: T.textDim }}>combined overage</div>
+                  </div>
+                </div>
+              )}
+
               <div className="chart-row" style={s.chartRow}>
-                {/* Ecosystem Concentration */}
-                <Section title="Overservice by Ecosystem" subtitle="Where red projects are concentrated">
+                {/* Ecosystem Concentration (core only) */}
+                <Section title="Overservice by Ecosystem" subtitle="Core ecosystem projects only">
                   <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
                     {/* Donut */}
                     <svg width={160} height={160} viewBox="0 0 160 160" style={{ flexShrink: 0 }}>
@@ -859,7 +877,7 @@ export default function Dashboard() {
                         });
                       })()}
                       <circle cx={80} cy={80} r={35} fill={T.bgCard} />
-                      <text x={80} y={76} textAnchor="middle" fontSize="18" fontWeight="900" fill={T.red}>{reds.length}</text>
+                      <text x={80} y={76} textAnchor="middle" fontSize="18" fontWeight="900" fill={T.red}>{coreReds.length}</text>
                       <text x={80} y={92} textAnchor="middle" fontSize="9" fill={T.textDim}>projects</text>
                     </svg>
                     {/* Legend + detail */}
@@ -940,9 +958,9 @@ export default function Dashboard() {
                 </Section>
               </div>
 
-              {/* Red Projects Table */}
-              <Section title="Red List Projects" subtitle="Sorted by overage · highest first">
-                <DataTable data={reds} columns={[
+              {/* Core Ecosystem Red Projects Table */}
+              <Section title="Red List Projects" subtitle="Core ecosystem projects · Sorted by overage">
+                <DataTable data={coreReds} columns={[
                   { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
                   { key: "client_name", label: "Client", w: 130, filter: true, style: { fontWeight: 600 } },
                   { key: "project_name", label: "Assignment", w: 220 },
@@ -955,6 +973,22 @@ export default function Dashboard() {
                   { key: "project_manager", label: "PM/Prod", w: 110, filter: true },
                 ]} />
               </Section>
+
+              {/* Support & Web Warranty Table */}
+              {supportReds.length > 0 && (
+                <Section title="Support & Web Warranty Red Projects" subtitle="Active Support and Active Web Warranty">
+                  <DataTable data={supportReds} columns={[
+                    { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
+                    { key: "client_name", label: "Client", w: 130, filter: true, style: { fontWeight: 600 } },
+                    { key: "project_name", label: "Assignment", w: 220 },
+                    { key: "category", label: "Type", w: 120, render: (v) => <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: T.bgHover, color: T.textMuted, fontWeight: 600 }}>{v === "Active Support" ? "Support" : "Web Warranty"}</span> },
+                    { key: "ecosystem", label: "Ecosystem", w: 90, filter: true, render: (v) => <span style={{ fontSize: 11, fontWeight: 600, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
+                    { key: "budget_forecast", label: "Budget", w: 90, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
+                    { key: "overage", label: "FTC Overage", w: 100, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: T.red }}>{fmtK(v)}</span> },
+                    { key: "project_manager", label: "PM/Prod", w: 110, filter: true },
+                  ]} />
+                </Section>
+              )}
             </>);
           })()}
         </>)}
