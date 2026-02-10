@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.5";
+const APP_VERSION = "1.8.6";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -838,22 +838,6 @@ export default function Dashboard() {
                 <div style={s.execKpi}><div style={s.execLabel}>Avg Overage</div><div style={{ ...s.execValue, color: T.red }}>{fmtK(totalOverage / reds.length)}</div><div style={s.execSub}>per red project</div></div>
               </div>
 
-              {/* Support / Web Warranty callout */}
-              {supportReds.length > 0 && (
-                <div style={{ marginBottom: 20, padding: "14px 18px", background: "#fff8e1", borderRadius: 10, border: `1px solid #ffe082`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Support & Web Warranty</div>
-                    <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-                      {supportReds.length} red project{supportReds.length !== 1 ? "s" : ""} outside core ecosystems — {supportReds.filter((p) => p.category === "Active Support").length} Support, {supportReds.filter((p) => p.category === "Active Web Warranty").length} Web Warranty
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: T.red }}>{fmtK(supportReds.reduce((sum, p) => sum + (p.overage || 0), 0))}</div>
-                    <div style={{ fontSize: 10, color: T.textDim }}>combined overage</div>
-                  </div>
-                </div>
-              )}
-
               <div className="chart-row" style={s.chartRow}>
                 {/* Ecosystem Concentration (core only) */}
                 <Section title="Overservice by Ecosystem" subtitle="Core ecosystem projects only">
@@ -927,9 +911,21 @@ export default function Dashboard() {
                       </div>;
                     })}
                   </div>
+                  {supportReds.length > 0 && (
+                    <div style={{ marginTop: 14, padding: "14px 18px", background: "#fff8e1", borderRadius: 10, border: `1px solid #ffe082`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Support & Web Warranty</div>
+                        <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                          {supportReds.length} red project{supportReds.length !== 1 ? "s" : ""} outside core ecosystems — {supportReds.filter((p) => p.category === "Active Support").length} Support, {supportReds.filter((p) => p.category === "Active Web Warranty").length} Web Warranty
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 20, fontWeight: 900, color: T.red }}>{fmtK(supportReds.reduce((sum, p) => sum + (p.overage || 0), 0))}</div>
+                        <div style={{ fontSize: 10, color: T.textDim }}>combined overage</div>
+                      </div>
+                    </div>
+                  )}
                 </Section>
-
-                {/* Overage Distribution */}
                 <Section title="Overage Severity" subtitle="Distribution of overservice amounts">
                   {(() => {
                     const brackets = [
@@ -973,22 +969,6 @@ export default function Dashboard() {
                   { key: "project_manager", label: "PM/Prod", w: 110, filter: true },
                 ]} />
               </Section>
-
-              {/* Support & Web Warranty Table */}
-              {supportReds.length > 0 && (
-                <Section title="Support & Web Warranty Red Projects" subtitle="Active Support and Active Web Warranty">
-                  <DataTable data={supportReds} columns={[
-                    { key: "rid", label: "RID", w: 70, style: { fontFamily: "monospace", fontSize: 12 } },
-                    { key: "client_name", label: "Client", w: 130, filter: true, style: { fontWeight: 600 } },
-                    { key: "project_name", label: "Assignment", w: 220 },
-                    { key: "category", label: "Type", w: 120, render: (v) => <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: T.bgHover, color: T.textMuted, fontWeight: 600 }}>{v === "Active Support" ? "Support" : "Web Warranty"}</span> },
-                    { key: "ecosystem", label: "Ecosystem", w: 90, filter: true, render: (v) => <span style={{ fontSize: 11, fontWeight: 600, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
-                    { key: "budget_forecast", label: "Budget", w: 90, fmt: fmtK, style: { fontFamily: "monospace", fontSize: 12 } },
-                    { key: "overage", label: "FTC Overage", w: 100, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: T.red }}>{fmtK(v)}</span> },
-                    { key: "project_manager", label: "PM/Prod", w: 110, filter: true },
-                  ]} />
-                </Section>
-              )}
             </>);
           })()}
         </>)}
