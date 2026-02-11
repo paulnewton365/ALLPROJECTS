@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.8";
+const APP_VERSION = "1.8.9";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -694,7 +694,7 @@ export default function Dashboard() {
           <Section title="Client Overservice Exposure" subtitle="Net overage consolidated across all live projects per client · Top 10">
             {(() => {
               const byClient = {};
-              d.live.projects.forEach((p) => {
+              d.live.projects.filter((p) => p.category === "Active Live Projects").forEach((p) => {
                 const c = p.client_name || "Unknown";
                 if (!byClient[c]) byClient[c] = { overage: 0, investment: 0, budget: 0, projects: 0, rids: [], redCount: 0, yellowCount: 0 };
                 byClient[c].overage += p.overage || 0;
