@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.6";
+const APP_VERSION = "1.8.7";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -691,6 +691,56 @@ export default function Dashboard() {
                 </div>)); })()}
             </Section>
           </div>
+          <Section title="Client Overservice Exposure" subtitle="Net overage consolidated across all live projects per client · Top 10">
+            {(() => {
+              const byClient = {};
+              d.live.projects.forEach((p) => {
+                const c = p.client_name || "Unknown";
+                if (!byClient[c]) byClient[c] = { overage: 0, investment: 0, budget: 0, projects: 0, rids: [], redCount: 0, yellowCount: 0 };
+                byClient[c].overage += p.overage || 0;
+                byClient[c].investment += p.approved_investment || 0;
+                byClient[c].budget += p.budget_forecast || 0;
+                byClient[c].projects++;
+                if (p.overage > 0) byClient[c].rids.push(p.rid);
+                if (p.rag_color === "red") byClient[c].redCount++;
+                if (p.rag_color === "yellow") byClient[c].yellowCount++;
+              });
+              const sorted = Object.entries(byClient)
+                .map(([name, v]) => ({ name, ...v, net: v.overage - v.investment }))
+                .filter((c) => c.overage > 0)
+                .sort((a, b) => b.net - a.net)
+                .slice(0, 10);
+              if (!sorted.length) return <div style={{ color: T.green, padding: 12 }}>✓ No clients with net overservice exposure</div>;
+              const maxNet = Math.max(...sorted.map((c) => Math.abs(c.net)), 1);
+              return (<div>
+                {sorted.map((c) => (
+                  <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ width: 140, flexShrink: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{c.name}</div>
+                      <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>
+                        {c.projects} project{c.projects !== 1 ? "s" : ""} · {fmtK(c.budget)} budget
+                        {c.redCount > 0 && <span style={{ color: T.red, fontWeight: 700, marginLeft: 4 }}>●{c.redCount}</span>}
+                        {c.yellowCount > 0 && <span style={{ color: T.yellow, fontWeight: 700, marginLeft: 4 }}>●{c.yellowCount}</span>}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, height: 20, background: T.bgHover, borderRadius: 4, overflow: "hidden", position: "relative" }}>
+                      <div style={{ height: "100%", borderRadius: 4, width: `${(Math.abs(c.net) / maxNet) * 100}%`, background: c.net > 0 ? `linear-gradient(90deg, ${T.red}, ${T.red}cc)` : T.green }} />
+                      {c.investment > 0 && <div style={{ position: "absolute", left: `${(c.investment / maxNet) * 100}%`, top: 0, bottom: 0, borderLeft: `2px dashed ${T.green}`, zIndex: 2 }} title={`${fmtK(c.investment)} invested`} />}
+                    </div>
+                    <div style={{ textAlign: "right", minWidth: 100, flexShrink: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, fontFamily: "monospace", color: c.net > 0 ? T.red : T.green }}>{fmtK(c.net)}</div>
+                      {c.investment > 0 && <div style={{ fontSize: 10, color: T.textDim }}>{fmtK(c.overage)} gross · {fmtK(c.investment)} inv</div>}
+                      {c.investment === 0 && <div style={{ fontSize: 10, color: T.textDim }}>{fmtK(c.overage)} gross</div>}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 10, color: T.textDim }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: T.red }} />Net overservice</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 0, borderTop: `2px dashed ${T.green}` }} />Investment offset</span>
+                </div>
+              </div>);
+            })()}
+          </Section>
           <AIInsights />
         </>)}
 
