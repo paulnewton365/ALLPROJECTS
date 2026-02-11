@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.8.7";
+const APP_VERSION = "1.8.8";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -741,6 +741,7 @@ export default function Dashboard() {
               </div>);
             })()}
           </Section>
+          <div style={{ height: 24 }} />
           <AIInsights />
         </>)}
 
