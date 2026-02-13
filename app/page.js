@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.10.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -375,16 +375,17 @@ function DivergingOverservice({ ecosystems }) {
 // ---------------------------------------------------------------------------
 // Bubble Matrix
 // ---------------------------------------------------------------------------
-function BubbleMatrix({ matrix, billable, totalProjects }) {
+function BubbleMatrix({ matrix, billable, totalProjects, revenueMode }) {
   if (!matrix?.ecosystems?.length) return <div style={{ color: T.textDim, padding: 20 }}>No data</div>;
   const lower = (billable || []).map((e) => e.toLowerCase());
   const ecoIdxs = matrix.ecosystems.map((e, i) => ({ name: e, idx: i })).filter((e) => lower.some((b) => e.name.toLowerCase().includes(b)));
   if (!ecoIdxs.length) return <div style={{ color: T.textDim, padding: 20 }}>No billable ecosystem data</div>;
-  const rtTotals = matrix.requestTypes.map((rt, ci) => ({ name: rt, idx: ci, total: ecoIdxs.reduce((sum, e) => sum + matrix.cells[e.idx][ci].count, 0) })).sort((a, b) => b.total - a.total);
+  const rtTotals = matrix.requestTypes.map((rt, ci) => ({ name: rt, idx: ci, total: ecoIdxs.reduce((sum, e) => sum + matrix.cells[e.idx][ci].count, 0), budget: ecoIdxs.reduce((sum, e) => sum + (matrix.cells[e.idx][ci].budget || 0), 0) })).sort((a, b) => b.total - a.total);
   const topRT = rtTotals.filter((r) => r.total > 0).slice(0, 10);
   const maxCount = Math.max(...ecoIdxs.flatMap((e) => topRT.map((rt) => matrix.cells[e.idx][rt.idx].count)), 1);
   const maxBudget = Math.max(...ecoIdxs.flatMap((e) => topRT.map((rt) => matrix.cells[e.idx][rt.idx].budget)), 1);
   const projTotal = totalProjects || ecoIdxs.reduce((sum, e) => sum + topRT.reduce((s, rt) => s + matrix.cells[e.idx][rt.idx].count, 0), 0) || 1;
+  const budgetTotal = ecoIdxs.reduce((sum, e) => sum + topRT.reduce((s, rt) => s + (matrix.cells[e.idx][rt.idx].budget || 0), 0), 0) || 1;
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -409,9 +410,9 @@ function BubbleMatrix({ matrix, billable, totalProjects }) {
           </tr>
           ))}
           <tr>
-            <td style={{ padding: "8px 8px", fontSize: 10, fontWeight: 700, color: T.textDim, borderTop: `2px solid ${T.borderDark}` }}>% of Projects</td>
+            <td style={{ padding: "8px 8px", fontSize: 10, fontWeight: 700, color: T.textDim, borderTop: `2px solid ${T.borderDark}` }}>{revenueMode ? "% of Revenue" : "% of Projects"}</td>
             {topRT.map((rt) => {
-              const pctVal = Math.round((rt.total / projTotal) * 100);
+              const pctVal = revenueMode ? Math.round((rt.budget / budgetTotal) * 100) : Math.round((rt.total / projTotal) * 100);
               return <td key={rt.name} style={{ padding: "8px 4px", textAlign: "center", fontSize: 11, fontWeight: 700, color: pctVal >= 20 ? T.text : T.textMuted, borderTop: `2px solid ${T.borderDark}` }}>{pctVal}%</td>;
             })}
           </tr>
@@ -601,20 +602,23 @@ export default function Dashboard() {
   const [tab, setTab] = useState("overview");
   const [history, setHistory] = useState([]);
   const [deptData, setDeptData] = useState(null);
+  const [deptHistory, setDeptHistory] = useState([]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
+        fetch("/api/dept-health-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
       const dept = await deptRes.json().catch(() => null);
+      const deptHist = await deptHistRes.json().catch(() => ({ history: [] }));
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -1150,12 +1154,30 @@ export default function Dashboard() {
           ) : (() => {
             const us = deptData.utilization_summary || {};
             const rs = deptData.revenue_summary || {};
+            const ps = deptData.pivot_summary || {};
             const effort = deptData.revenue_sections?.["TOTAL EFFORT"] || [];
             const deviation = deptData.revenue_sections?.["DEVIATION"] || [];
             const util = deptData.utilization || [];
             const integ = deptData.integrated_projects || [];
             const is_ = deptData.integrated_summary || {};
             const pen = deptData.penetration || {};
+            const smm = deptData.service_mix_matrix || { ecosystems: [], requestTypes: [], cells: [] };
+
+            // Build penetration trend data: history + live "last month" point
+            const penTrend = (() => {
+              const hist = [...(deptHistory || [])];
+              // Append live "last month" values as current data point if available
+              if (pen.last_month?.experiences != null) {
+                const now = new Date();
+                const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const lmLabel = `${lm.getFullYear()}-${String(lm.getMonth() + 1).padStart(2, "0")}`;
+                if (!hist.find((h) => h.month === lmLabel)) {
+                  hist.push({ month: lmLabel, experiences: pen.last_month.experiences, delivery: pen.last_month.delivery, combined: pen.last_month.combined || (pen.last_month.experiences + pen.last_month.delivery) });
+                }
+              }
+              hist.sort((a, b) => a.month.localeCompare(b.month));
+              return hist;
+            })();
 
             // Chart dimensions
             const chartW = 900, chartH = 220, padL = 60, padR = 20, padT = 20, padB = 40;
@@ -1165,44 +1187,49 @@ export default function Dashboard() {
             const utilColor = (v) => v >= 80 ? T.red : v >= 60 ? T.yellow : v >= 40 ? T.green : T.blue;
             const billableColor = (v) => v >= 50 ? T.green : v >= 30 ? T.yellow : T.red;
 
-            // Revenue line chart
-            const revenueChart = (() => {
-              if (effort.length < 2) return null;
-              const maxVal = Math.max(...effort.map((m) => Math.max(m.delivery, m.experiences, m.total)), 1);
-              const yScale = (v) => padT + plotH - (v / maxVal) * plotH;
-              const xScale = (i) => padL + (i / (effort.length - 1)) * plotW;
-              const makeLine = (key) => effort.map((m, i) => `${i === 0 ? "M" : "L"}${xScale(i).toFixed(1)},${yScale(m[key]).toFixed(1)}`).join(" ");
-              const makeArea = (key) => {
-                const line = makeLine(key);
-                return `${line} L${xScale(effort.length - 1).toFixed(1)},${yScale(0).toFixed(1)} L${xScale(0).toFixed(1)},${yScale(0).toFixed(1)} Z`;
-              };
-              const yTicks = 5;
-              const yLabels = Array.from({ length: yTicks + 1 }, (_, i) => (maxVal / yTicks) * i);
+            // Penetration trend line chart
+            const penetrationTrendChart = (() => {
+              if (penTrend.length < 2) return null;
+              const ptW = 900, ptH = 260, ptPadL = 50, ptPadR = 30, ptPadT = 30, ptPadB = 40;
+              const ptPlotW = ptW - ptPadL - ptPadR, ptPlotH = ptH - ptPadT - ptPadB;
+              const maxPct = Math.max(...penTrend.map((m) => Math.max(m.experiences || 0, m.delivery || 0, m.combined || 0)), 20);
+              const yS = (v) => ptPadT + ptPlotH - (v / maxPct) * ptPlotH;
+              const xS = (i) => ptPadL + (i / (penTrend.length - 1)) * ptPlotW;
+              const mkLine = (key) => penTrend.map((m, i) => `${i === 0 ? "M" : "L"}${xS(i).toFixed(1)},${yS(m[key] || 0).toFixed(1)}`).join(" ");
+              const mkArea = (key) => `${mkLine(key)} L${xS(penTrend.length - 1).toFixed(1)},${yS(0).toFixed(1)} L${xS(0).toFixed(1)},${yS(0).toFixed(1)} Z`;
+              const yTicks = Array.from({ length: 5 }, (_, i) => (maxPct / 4) * i);
+              const last = penTrend[penTrend.length - 1];
               return (
-                <svg viewBox={`0 0 ${chartW} ${chartH}`} style={{ width: "100%", height: "auto" }}>
-                  {yLabels.map((v, i) => (
+                <svg viewBox={`0 0 ${ptW} ${ptH}`} style={{ width: "100%", height: "auto" }}>
+                  {yTicks.map((v, i) => (
                     <g key={i}>
-                      <line x1={padL} y1={yScale(v)} x2={chartW - padR} y2={yScale(v)} stroke={T.border} strokeWidth={0.5} strokeDasharray={i === 0 ? "0" : "3,3"} />
-                      <text x={padL - 8} y={yScale(v) + 4} textAnchor="end" fontSize={9} fill={T.textDim}>${(v / 1000).toFixed(0)}K</text>
+                      <line x1={ptPadL} y1={yS(v)} x2={ptW - ptPadR} y2={yS(v)} stroke={T.border} strokeWidth={0.5} strokeDasharray={i === 0 ? "0" : "3,3"} />
+                      <text x={ptPadL - 8} y={yS(v) + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{Math.round(v)}%</text>
                     </g>
                   ))}
-                  <path d={makeArea("delivery")} fill="#1a2a4a" opacity={0.15} />
-                  <path d={makeArea("experiences")} fill="#7a68a8" opacity={0.15} />
-                  <path d={makeLine("total")} fill="none" stroke="#c75080" strokeWidth={2.5} strokeLinejoin="round" />
-                  <path d={makeLine("delivery")} fill="none" stroke="#1a2a4a" strokeWidth={2} strokeLinejoin="round" />
-                  <path d={makeLine("experiences")} fill="none" stroke="#7a68a8" strokeWidth={2} strokeLinejoin="round" />
-                  {effort.map((m, i) => (
-                    (i % Math.max(1, Math.floor(effort.length / 10)) === 0 || i === effort.length - 1) && (
-                      <text key={i} x={xScale(i)} y={chartH - 8} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month}</text>
-                    )
+                  <path d={mkArea("combined")} fill="#c75080" opacity={0.08} />
+                  <path d={mkArea("experiences")} fill="#7a68a8" opacity={0.12} />
+                  <path d={mkArea("delivery")} fill="#1a2a4a" opacity={0.12} />
+                  <path d={mkLine("combined")} fill="none" stroke="#c75080" strokeWidth={2.5} strokeLinejoin="round" />
+                  <path d={mkLine("experiences")} fill="none" stroke="#7a68a8" strokeWidth={2} strokeLinejoin="round" />
+                  <path d={mkLine("delivery")} fill="none" stroke="#1a2a4a" strokeWidth={2} strokeLinejoin="round" />
+                  {penTrend.map((m, i) => (
+                    <text key={i} x={xS(i)} y={ptH - 8} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month.replace(/^\d{4}-/, "")}</text>
                   ))}
-                  {[{ key: "total", color: "#c75080" }, { key: "delivery", color: "#1a2a4a" }, { key: "experiences", color: "#7a68a8" }].map(({ key, color }) => (
-                    <circle key={key} cx={xScale(effort.length - 1)} cy={yScale(effort[effort.length - 1][key])} r={4} fill={color} />
+                  {[
+                    { key: "combined", color: "#c75080", label: `${last.combined || 0}%` },
+                    { key: "experiences", color: "#7a68a8", label: `${last.experiences || 0}%` },
+                    { key: "delivery", color: "#1a2a4a", label: `${last.delivery || 0}%` },
+                  ].map(({ key, color, label }) => (
+                    <g key={key}>
+                      <circle cx={xS(penTrend.length - 1)} cy={yS(last[key] || 0)} r={5} fill={color} />
+                      <text x={xS(penTrend.length - 1) + 10} y={yS(last[key] || 0) + 4} fontSize={11} fontWeight={700} fill={color}>{label}</text>
+                    </g>
                   ))}
-                  {[{ label: "Delivery", color: "#1a2a4a", x: padL }, { label: "Experiences", color: "#7a68a8", x: padL + 100 }, { label: "Total", color: "#c75080", x: padL + 220 }].map((l) => (
+                  {[{ label: "Delivery", color: "#1a2a4a", x: ptPadL }, { label: "Experiences", color: "#7a68a8", x: ptPadL + 100 }, { label: "Combined", color: "#c75080", x: ptPadL + 230 }].map((l) => (
                     <g key={l.label}>
-                      <line x1={l.x} y1={8} x2={l.x + 20} y2={8} stroke={l.color} strokeWidth={2} />
-                      <text x={l.x + 24} y={11} fontSize={10} fontWeight={600} fill={l.color}>{l.label}</text>
+                      <line x1={l.x} y1={12} x2={l.x + 20} y2={12} stroke={l.color} strokeWidth={2.5} />
+                      <text x={l.x + 24} y={15} fontSize={10} fontWeight={600} fill={l.color}>{l.label}</text>
                     </g>
                   ))}
                 </svg>
@@ -1272,8 +1299,8 @@ export default function Dashboard() {
                   { label: "Avg Utilization", value: `${us.avg_utilization || 0}%`, color: utilColor(us.avg_utilization || 0), sub: "Last 30 days" },
                   { label: "Avg Billable", value: `${us.avg_billable || 0}%`, color: billableColor(us.avg_billable || 0), sub: `${us.low_billable || 0} below 30%` },
                   { label: "Avg Admin", value: `${us.avg_admin || 0}%`, color: T.textMuted, sub: "Of total time" },
-                  { label: rs.latest_month ? `Revenue ${rs.latest_month}` : "Latest Revenue", value: fmtK(rs.latest_total || 0), color: T.text, sub: rs.mom_change != null ? `${rs.mom_change > 0 ? "+" : ""}${rs.mom_change}% MoM` : "—" },
-                  { label: "Delivery Share", value: rs.delivery_share != null ? `${rs.delivery_share}%` : "—", color: T.blue, sub: `Exp: ${rs.delivery_share != null ? (100 - rs.delivery_share).toFixed(1) : "—"}%` },
+                  { label: "Latest Revenue", value: fmtK(rs.this_month_total || 0), color: T.text, sub: `Exp: ${fmtK(rs.this_month_exp || 0)} · Del: ${fmtK(rs.this_month_del || 0)}` },
+                  { label: "Penetration (Combined)", value: pen.last_month?.combined != null ? `${pen.last_month.combined}%` : "—", color: "#c75080", sub: `Exp: ${pen.last_month?.experiences ?? "—"}% · Del: ${pen.last_month?.delivery ?? "—"}%` },
                 ].map((kpi) => (
                   <div key={kpi.label} style={s.execKpi}>
                     <div style={s.execLabel}>{kpi.label}</div>
@@ -1317,19 +1344,19 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Worked Revenue Chart */}
-              <Section title="Worked Revenue (Including OS)" subtitle={`Delivery vs Experiences · ${effort.length} months`}>
-                {revenueChart || <div style={{ color: T.textDim, fontSize: 12, padding: 20 }}>Insufficient data for chart (need ≥2 months)</div>}
-                {effort.length > 0 && (
-                  <div style={{ display: "flex", gap: 20, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
+              {/* Penetration Trend */}
+              <Section title="Penetration Trend" subtitle={`D&E share of total incurred revenue · ${penTrend.length} data points · Baseline: Dec 2025 (Exp 10%, Del 6%)`}>
+                {penetrationTrendChart || <div style={{ color: T.textDim, fontSize: 12, padding: 20 }}>Insufficient data for chart (need ≥2 months). Penetration history will accumulate automatically.</div>}
+                {penTrend.length > 0 && (
+                  <div style={{ display: "flex", gap: 28, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
                     {[
-                      { label: "Latest Total", value: fmtK(effort[effort.length - 1]?.total || 0), color: "#c75080" },
-                      { label: "Latest Delivery", value: fmtK(effort[effort.length - 1]?.delivery || 0), color: "#1a2a4a" },
-                      { label: "Latest Experiences", value: fmtK(effort[effort.length - 1]?.experiences || 0), color: "#7a68a8" },
+                      { label: "Combined", value: `${penTrend[penTrend.length - 1]?.combined || 0}%`, color: "#c75080" },
+                      { label: "Experiences", value: `${penTrend[penTrend.length - 1]?.experiences || 0}%`, color: "#7a68a8" },
+                      { label: "Delivery", value: `${penTrend[penTrend.length - 1]?.delivery || 0}%`, color: "#1a2a4a" },
                     ].map((m) => (
                       <div key={m.label} style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: T.textDim }}>{m.label}</div>
-                        <div style={{ fontSize: 20, fontWeight: 900, color: m.color }}>{m.value}</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: m.color }}>{m.value}</div>
                       </div>
                     ))}
                   </div>
@@ -1500,31 +1527,41 @@ export default function Dashboard() {
                     })}
                   </div>
                 </Section>
-                <Section title="Weekly Deviation" subtitle={`Total: ${fmtK(is_.total_deviation || 0)} this week`}>
+                <Section title="D&E Revenue per Ecosystem" subtitle={`Total budget: ${fmtK(is_.total_budget || 0)} · Total actuals: ${fmtK(is_.total_actuals || 0)}`}>
                   <div style={{ padding: "8px 0" }}>
-                    {Object.entries(is_.by_ecosystem || {}).sort((a, b) => b[1].deviation - a[1].deviation).map(([eco, ecoData]) => {
-                      const maxDev = Math.max(...Object.values(is_.by_ecosystem || {}).map((dd) => Math.abs(dd.deviation)), 1);
-                      const pctW = Math.abs(ecoData.deviation) / maxDev * 100;
-                      const isPos = ecoData.deviation > 0;
+                    {Object.entries(is_.by_ecosystem || {}).filter(([eco]) => eco !== "-").sort((a, b) => b[1].actuals - a[1].actuals).map(([eco, ecoData]) => {
+                      const maxBudget = Math.max(...Object.values(is_.by_ecosystem || {}).map((d) => d.budget), 1);
                       return (
-                        <div key={eco} style={s.barRow}>
-                          <div style={{ ...s.barLabel, width: 100 }}>{eco}</div>
-                          <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
-                            <div style={{ width: "50%", display: "flex", justifyContent: "flex-end" }}>
-                              {!isPos && <div style={{ width: `${pctW}%`, height: 14, background: T.green, borderRadius: "3px 0 0 3px", opacity: 0.7, minWidth: 2 }} />}
-                            </div>
-                            <div style={{ width: 1, height: 20, background: T.borderDark }} />
-                            <div style={{ width: "50%" }}>
-                              {isPos && <div style={{ width: `${pctW}%`, height: 14, background: T.red, borderRadius: "0 3px 3px 0", opacity: 0.7, minWidth: 2 }} />}
+                        <div key={eco} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                          <div style={{ width: 100, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco] || T.textMuted }}>{eco}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", gap: 2, height: 18, borderRadius: 4, overflow: "hidden", background: T.bgHover }}>
+                              <div style={{ width: `${(ecoData.actuals / maxBudget) * 100}%`, background: ECO_COLORS[eco] || T.blue, borderRadius: "4px 0 0 4px", minWidth: ecoData.actuals > 0 ? 2 : 0 }} title={`Actuals: ${fmtK(ecoData.actuals)}`} />
+                              <div style={{ width: `${(Math.max(0, ecoData.budget - ecoData.actuals) / maxBudget) * 100}%`, background: ECO_COLORS[eco] || T.blue, opacity: 0.25, borderRadius: "0 4px 4px 0", minWidth: ecoData.budget > ecoData.actuals ? 1 : 0 }} title={`Remaining: ${fmtK(ecoData.budget - ecoData.actuals)}`} />
                             </div>
                           </div>
-                          <div style={{ ...s.barValue, width: 70, color: isPos ? T.red : T.green }}>{fmtK(ecoData.deviation)}</div>
+                          <div style={{ width: 70, textAlign: "right", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>{fmtK(ecoData.actuals)}</div>
+                          <div style={{ width: 60, textAlign: "right", fontSize: 10, color: T.textDim }}>{ecoData.count} proj</div>
                         </div>
                       );
                     })}
+                    <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 10, color: T.textDim }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, display: "inline-block" }} /> Actuals</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, opacity: 0.25, display: "inline-block" }} /> Remaining Budget</span>
+                    </div>
                   </div>
                 </Section>
               </div>
+
+              {/* Service Mix by Ecosystem — D&E Projects */}
+              {smm.ecosystems.length > 0 && smm.requestTypes.length > 0 && (
+                <>
+                  <Section title="Service Mix by Ecosystem" subtitle={`D&E integrated projects · Revenue as proportion of total ${fmtK(is_.total_budget || 0)} budget`}>
+                    <BubbleMatrix matrix={smm} billable={smm.ecosystems} totalProjects={is_.total_projects || integ.length} revenueMode={true} />
+                  </Section>
+                  <div style={{ height: 16 }} />
+                </>
+              )}
 
               {/* Integrated Projects Table */}
               <Section title="Integrated Project Status" subtitle={`${integ.length} projects · Sorted by overage`}>
