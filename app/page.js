@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.2";
+const APP_VERSION = "1.10.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -599,7 +599,24 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("overview");
+  const VALID_TABS = ["overview", "live", "pipeline", "dept"];
+  const getTabFromHash = () => {
+    if (typeof window === "undefined") return "overview";
+    const h = window.location.hash.replace("#", "").toLowerCase();
+    return VALID_TABS.includes(h) ? h : "overview";
+  };
+  const [tab, setTabRaw] = useState("overview");
+  const setTab = (t) => {
+    setTabRaw(t);
+    if (typeof window !== "undefined") window.location.hash = t;
+  };
+
+  useEffect(() => {
+    setTabRaw(getTabFromHash());
+    const onHash = () => setTabRaw(getTabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [history, setHistory] = useState([]);
   const [deptData, setDeptData] = useState(null);
   const [deptHistory, setDeptHistory] = useState([]);
@@ -741,7 +758,6 @@ export default function Dashboard() {
                     <div style={{ textAlign: "right", minWidth: 100, flexShrink: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, fontFamily: "monospace", color: c.net > 0 ? T.red : T.green }}>{fmtK(c.net)}</div>
                       {c.investment > 0 && <div style={{ fontSize: 10, color: T.textDim }}>{fmtK(c.overage)} gross · {fmtK(c.investment)} inv</div>}
-                      {c.investment === 0 && <div style={{ fontSize: 10, color: T.textDim }}>{fmtK(c.overage)} gross</div>}
                     </div>
                   </div>
                 ))}
@@ -770,8 +786,8 @@ export default function Dashboard() {
             <KPI label="Missing Time" value={fmtK(d.live.financials.missing_time_total)} color={d.live.financials.missing_time_total > 5000 ? T.yellow : T.green} />
           </div>
           <div className="chart-row" style={s.chartRow}>
-            <Section title="Budget by Ecosystem" subtitle="Billable P&Ls"><BarChart data={liveEcoBillable} labelKey="name" valueKey="budget" color={T.text} formatValue={fmtK} /></Section>
-            <Section title="Overage by Ecosystem" subtitle="Billable P&Ls"><BarChart data={liveEcoBillable.filter((e) => e.overage !== 0).sort((a,b) => b.overage - a.overage)} labelKey="name" valueKey="overage" color={(i) => i.overage > 0 ? T.red : T.green} formatValue={fmtK} /></Section>
+            <Section title="Live Revenue" subtitle="Billable P&Ls"><BarChart data={liveEcoBillable} labelKey="name" valueKey="budget" color={T.text} formatValue={fmtK} /></Section>
+            <Section title="Net Overage By Ecosystem" subtitle="Billable P&Ls"><BarChart data={liveEcoBillable.filter((e) => e.overage !== 0).sort((a,b) => b.overage - a.overage)} labelKey="name" valueKey="overage" color={(i) => i.overage > 0 ? T.red : T.green} formatValue={fmtK} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Top Underservice" subtitle="Greatest underservice first">{(() => {
@@ -1596,7 +1612,7 @@ export default function Dashboard() {
         <div style={s.footer}>Generated {new Date(d.generated_at).toLocaleString()} · v{APP_VERSION}</div>
       </>)}
 
-      {loading && !data && <div style={{ textAlign: "center", padding: 80, color: T.textDim }}><div style={{ fontSize: 28, marginBottom: 12, animation: "spin 1s linear infinite" }}>⟳</div>Loading from Smartsheet...</div>}
+      {loading && !data && <div style={{ textAlign: "center", padding: 80, color: T.textMuted }}><div style={{ fontSize: 32, marginBottom: 16, animation: "spin 1.5s ease-in-out infinite" }}>⟳</div><div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>One mo. Just having a look at the data on Smartsheet.</div><div style={{ fontSize: 12, color: T.textDim }}>This usually takes a few seconds…</div></div>}
     </div>
   </>);
 }
