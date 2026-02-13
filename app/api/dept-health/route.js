@@ -335,6 +335,44 @@ export async function GET() {
         this_month_rows: penThisRaw?.totalRowCount || 0,
         last_month_rows: penLastRaw?.totalRowCount || 0,
       },
+      // DEBUG: raw column names and first row for each source
+      _debug_columns: {
+        revenue_columns: (revenueRaw.columns || []).map((c) => ({ id: c.id, title: c.title })),
+        revenue_first_3_rows: (revenueRaw.rows || []).slice(0, 3).map((r) => {
+          const obj = {};
+          for (const cell of r.cells || []) {
+            const col = (revenueRaw.columns || []).find((c) => c.id === cell.columnId);
+            obj[col?.title || cell.columnId] = cell.displayValue || cell.value;
+          }
+          return obj;
+        }),
+        revenue_rows_10_to_18: (revenueRaw.rows || []).slice(10, 18).map((r, idx) => {
+          const obj = { _row_index: 10 + idx };
+          for (const cell of r.cells || []) {
+            const col = (revenueRaw.columns || []).find((c) => c.id === cell.columnId);
+            obj[col?.title || cell.columnId] = cell.displayValue || cell.value;
+          }
+          return obj;
+        }),
+        utilization_columns: (utilizationRaw.columns || []).map((c) => ({ id: c.id, title: c.title, virtualId: c.virtualId })),
+        utilization_first_row: (utilizationRaw.rows || []).slice(0, 1).map((r) => {
+          const obj = {};
+          for (const cell of r.cells || []) {
+            const col = (utilizationRaw.columns || []).find((c) => c.id === cell.columnId);
+            obj[col?.title || cell.columnId] = { display: cell.displayValue, value: cell.value };
+          }
+          return obj;
+        }),
+        integrated_columns: (integratedRaw.columns || []).map((c) => ({ id: c.id, title: c.title, virtualId: c.virtualId })),
+        integrated_first_row: (integratedRaw.rows || []).slice(0, 1).map((r) => {
+          const obj = {};
+          for (const cell of r.cells || []) {
+            const col = (integratedRaw.columns || []).find((c) => c.id === cell.columnId);
+            obj[col?.title || cell.columnId] = { display: cell.displayValue, value: cell.value };
+          }
+          return obj;
+        }),
+      },
     }, {
       headers: { "Cache-Control": "no-store, max-age=0" },
     });
