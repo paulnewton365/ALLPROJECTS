@@ -391,7 +391,7 @@ function BubbleMatrix({ matrix, billable, totalProjects, revenueMode }) {
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr>
           <th style={{ ...s.matrixTh, textAlign: "left", width: 100 }}>Ecosystem</th>
-          {topRT.map((rt) => <th key={rt.name} style={s.matrixTh} title={rt.name}><div style={{ transform: "rotate(-45deg)", transformOrigin: "left bottom", whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, color: T.textMuted }}>{rt.name.length > 14 ? rt.name.slice(0, 12) + "…" : rt.name}</div></th>)}
+          {topRT.map((rt) => <th key={rt.name} style={{ ...s.matrixTh, verticalAlign: "bottom", height: "auto", padding: "8px 4px" }} title={rt.name}><div style={{ whiteSpace: "nowrap", fontSize: 10, fontWeight: 600, color: T.textMuted }}>{rt.name.length > 18 ? rt.name.slice(0, 16) + "…" : rt.name}</div></th>)}
         </tr></thead>
         <tbody>
           {ecoIdxs.map((eco) => (
@@ -663,7 +663,7 @@ export default function Dashboard() {
           { key: "redlist", label: "Red List", count: d.live.projects.filter((p) => p.rag_color === "red").length },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
-          { key: "dept", label: "Delivery vs Experiences", count: deptData?.utilization_summary?.team_size || null },
+          { key: "dept", label: "Delivery & Experiences", count: deptData?.utilization_summary?.team_size || null },
         ]} active={tab} onChange={setTab} />
 
         {/* ============ EXECUTIVE OVERVIEW ============ */}
@@ -1144,7 +1144,7 @@ export default function Dashboard() {
         </>); })()}
         </>)}
 
-        {/* ============ DELIVERY vs EXPERIENCES ============ */}
+        {/* ============ DELIVERY & EXPERIENCES ============ */}
         {tab === "dept" && (<>
           {!deptData ? (
             <div style={{ textAlign: "center", padding: 60, color: T.textDim }}>
@@ -1299,8 +1299,8 @@ export default function Dashboard() {
                   { label: "Avg Utilization", value: `${us.avg_utilization || 0}%`, color: utilColor(us.avg_utilization || 0), sub: "Last 30 days" },
                   { label: "Avg Billable", value: `${us.avg_billable || 0}%`, color: billableColor(us.avg_billable || 0), sub: `${us.low_billable || 0} below 30%` },
                   { label: "Avg Admin", value: `${us.avg_admin || 0}%`, color: T.textMuted, sub: "Of total time" },
-                  { label: "Latest Revenue", value: fmtK(rs.this_month_total || 0), color: T.text, sub: `Exp: ${fmtK(rs.this_month_exp || 0)} · Del: ${fmtK(rs.this_month_del || 0)}` },
-                  { label: "Penetration (Combined)", value: pen.last_month?.combined != null ? `${pen.last_month.combined}%` : "—", color: "#c75080", sub: `Exp: ${pen.last_month?.experiences ?? "—"}% · Del: ${pen.last_month?.delivery ?? "—"}%` },
+                  { label: "D&E Revenue (Actuals + Forecast)", value: fmtK(rs.this_month_total || 0), color: T.text, sub: `Exp: ${fmtK(rs.this_month_exp || 0)} · Del: ${fmtK(rs.this_month_del || 0)}` },
+                  { label: "Net Overservice", value: fmtK(is_.total_overage || 0), color: (is_.total_overage || 0) > 0 ? T.red : T.green, sub: `${is_.total_projects || 0} integrated projects` },
                 ].map((kpi) => (
                   <div key={kpi.label} style={s.execKpi}>
                     <div style={s.execLabel}>{kpi.label}</div>
@@ -1449,9 +1449,9 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {[...util].sort((a, b) => (b.billable || 0) - (a.billable || 0)).map((t, i) => {
-                        const bW = Math.round(((t.billable || 0) / 100) * 200);
-                        const aW = Math.round(((t.admin_time || 0) / 100) * 200);
-                        const nbW = Math.max(0, Math.round((((t.utilization || 0) - (t.billable || 0) - (t.admin_time || 0)) / 100) * 200));
+                        const bW = `${t.billable || 0}%`;
+                        const aW = `${t.admin_time || 0}%`;
+                        const nbW = `${Math.max(0, (t.utilization || 0) - (t.billable || 0) - (t.admin_time || 0))}%`;
                         return (
                           <tr key={i} style={{ background: i % 2 === 0 ? T.bgCard : T.bgCardAlt }}>
                             <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{t.name}</td>
@@ -1460,10 +1460,10 @@ export default function Dashboard() {
                             <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: billableColor(t.billable || 0) }}>{pct(t.billable)}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{pct(t.admin_time)}</td>
                             <td style={s.td}>
-                              <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden", width: 200, background: T.bgHover }}>
+                              <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden", flex: 1, background: T.bgHover }}>
                                 <div style={{ width: bW, background: T.green }} title={`Billable: ${pct(t.billable)}`} />
                                 <div style={{ width: aW, background: T.yellow, opacity: 0.6 }} title={`Admin: ${pct(t.admin_time)}`} />
-                                <div style={{ width: nbW, background: T.blue, opacity: 0.4 }} title="Other" />
+                                <div style={{ width: nbW, background: T.blue, opacity: 0.4 }} title="Clientable" />
                               </div>
                             </td>
                           </tr>
@@ -1474,7 +1474,7 @@ export default function Dashboard() {
                   <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 10, color: T.textDim }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.green, display: "inline-block" }} /> Billable</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.yellow, opacity: 0.6, display: "inline-block" }} /> Admin</span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, opacity: 0.4, display: "inline-block" }} /> Other</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, opacity: 0.4, display: "inline-block" }} /> Clientable</span>
                   </div>
                 </div>
               </Section>
@@ -1484,28 +1484,37 @@ export default function Dashboard() {
               {(us.by_role || []).length > 0 && (
                 <>
                   <Section title="Utilization by Role" subtitle="Averaged across team members">
-                    {us.by_role.map((r) => (
-                      <div key={r.role} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-                        <div style={{ width: 180, fontSize: 12, fontWeight: 600 }}>{r.role}</div>
-                        <div style={{ width: 40, fontSize: 11, color: T.textDim, textAlign: "center" }}>{r.count}</div>
-                        <div style={{ flex: 1, display: "flex", gap: 12, alignItems: "center" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                            <span style={{ fontSize: 10, color: T.textDim, width: 40 }}>Billable</span>
-                            <div style={{ width: 120, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
+                    {us.by_role.map((r) => {
+                      const clientable = Math.max(0, r.avg_utilization - r.avg_billable - r.avg_admin);
+                      return (
+                      <div key={r.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                        <div style={{ width: 140, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{r.role}</div>
+                        <div style={{ width: 30, fontSize: 11, color: T.textDim, textAlign: "center", flexShrink: 0 }}>{r.count}</div>
+                        <div style={{ flex: 1, display: "flex", gap: 6, alignItems: "center" }}>
+                          <div style={{ flex: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: 10, color: T.textDim, width: 40, flexShrink: 0 }}>Billable</span>
+                            <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
                               <div style={{ width: `${r.avg_billable}%`, height: "100%", background: billableColor(r.avg_billable), borderRadius: 3 }} />
                             </div>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: billableColor(r.avg_billable), width: 36, textAlign: "right" }}>{r.avg_billable}%</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: billableColor(r.avg_billable), width: 36, textAlign: "right", flexShrink: 0 }}>{r.avg_billable}%</span>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                            <span style={{ fontSize: 10, color: T.textDim, width: 40 }}>Admin</span>
-                            <div style={{ width: 80, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ flex: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: 10, color: T.textDim, width: 40, flexShrink: 0 }}>Admin</span>
+                            <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
                               <div style={{ width: `${r.avg_admin}%`, height: "100%", background: T.yellow, opacity: 0.7, borderRadius: 3 }} />
                             </div>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, width: 36, textAlign: "right" }}>{r.avg_admin}%</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, width: 36, textAlign: "right", flexShrink: 0 }}>{r.avg_admin}%</span>
+                          </div>
+                          <div style={{ flex: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: 10, color: T.textDim, width: 52, flexShrink: 0 }}>Clientable</span>
+                            <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
+                              <div style={{ width: `${clientable}%`, height: "100%", background: T.blue, opacity: 0.4, borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, width: 36, textAlign: "right", flexShrink: 0 }}>{clientable}%</span>
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );})}
                   </Section>
                   <div style={{ height: 16 }} />
                 </>
@@ -1527,7 +1536,7 @@ export default function Dashboard() {
                     })}
                   </div>
                 </Section>
-                <Section title="D&E Revenue per Ecosystem" subtitle={`Total budget: ${fmtK(is_.total_budget || 0)} · Total actuals: ${fmtK(is_.total_actuals || 0)}`}>
+                <Section title="D&E Live Revenue per Ecosystem" subtitle={`Active projects only (excludes archived/completed) · Budget: ${fmtK(is_.total_budget || 0)} · Actuals: ${fmtK(is_.total_actuals || 0)}`}>
                   <div style={{ padding: "8px 0" }}>
                     {Object.entries(is_.by_ecosystem || {}).filter(([eco]) => eco !== "-").sort((a, b) => b[1].actuals - a[1].actuals).map(([eco, ecoData]) => {
                       const maxBudget = Math.max(...Object.values(is_.by_ecosystem || {}).map((d) => d.budget), 1);
