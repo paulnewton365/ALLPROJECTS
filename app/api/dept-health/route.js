@@ -288,7 +288,7 @@ export async function GET() {
       total_projects: integrated.length,
       total_budget: integrated.reduce((a, p) => a + p.budget_forecast, 0),
       total_actuals: integrated.reduce((a, p) => a + p.actuals, 0),
-      total_overage: integrated.reduce((a, p) => a + Math.max(0, p.overage), 0),
+      total_overage: integrated.reduce((a, p) => a + (p.overage || 0), 0),
       total_deviation: integrated.reduce((a, p) => a + (p.last_weeks_deviation || 0), 0),
       rag: (() => {
         const counts = { green: 0, yellow: 0, red: 0, blue: 0 };

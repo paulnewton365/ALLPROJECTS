@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.10.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1300,7 +1300,7 @@ export default function Dashboard() {
                   { label: "Avg Billable", value: `${us.avg_billable || 0}%`, color: billableColor(us.avg_billable || 0), sub: `${us.low_billable || 0} below 30%` },
                   { label: "Avg Admin", value: `${us.avg_admin || 0}%`, color: T.textMuted, sub: "Of total time" },
                   { label: "D&E Revenue (Actuals + Forecast)", value: fmtK(rs.this_month_total || 0), color: T.text, sub: `Exp: ${fmtK(rs.this_month_exp || 0)} · Del: ${fmtK(rs.this_month_del || 0)}` },
-                  { label: "Net Overservice", value: fmtK(is_.total_overage || 0), color: (is_.total_overage || 0) > 0 ? T.red : T.green, sub: `${is_.total_projects || 0} integrated projects` },
+                  { label: "Net Overservice", value: fmtK(is_.total_overage || 0), color: (is_.total_overage || 0) > 0 ? T.red : T.green, sub: `${integ.filter(p => p.overage > 0).length} over · ${integ.filter(p => p.overage < 0).length} under · ${is_.total_projects || 0} total` },
                 ].map((kpi) => (
                   <div key={kpi.label} style={s.execKpi}>
                     <div style={s.execLabel}>{kpi.label}</div>
