@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.1";
+const APP_VERSION = "1.10.2";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1207,26 +1207,26 @@ export default function Dashboard() {
                       <text x={ptPadL - 8} y={yS(v) + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{Math.round(v)}%</text>
                     </g>
                   ))}
-                  <path d={mkArea("combined")} fill="#c75080" opacity={0.08} />
-                  <path d={mkArea("experiences")} fill="#7a68a8" opacity={0.12} />
-                  <path d={mkArea("delivery")} fill="#1a2a4a" opacity={0.12} />
-                  <path d={mkLine("combined")} fill="none" stroke="#c75080" strokeWidth={2.5} strokeLinejoin="round" />
-                  <path d={mkLine("experiences")} fill="none" stroke="#7a68a8" strokeWidth={2} strokeLinejoin="round" />
-                  <path d={mkLine("delivery")} fill="none" stroke="#1a2a4a" strokeWidth={2} strokeLinejoin="round" />
+                  <path d={mkArea("combined")} fill={T.pink} opacity={0.08} />
+                  <path d={mkArea("experiences")} fill={T.purple} opacity={0.12} />
+                  <path d={mkArea("delivery")} fill={T.blue} opacity={0.12} />
+                  <path d={mkLine("combined")} fill="none" stroke={T.pink} strokeWidth={2.5} strokeLinejoin="round" />
+                  <path d={mkLine("experiences")} fill="none" stroke={T.purple} strokeWidth={2} strokeLinejoin="round" />
+                  <path d={mkLine("delivery")} fill="none" stroke={T.blue} strokeWidth={2} strokeLinejoin="round" />
                   {penTrend.map((m, i) => (
                     <text key={i} x={xS(i)} y={ptH - 8} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month.replace(/^\d{4}-/, "")}</text>
                   ))}
                   {[
-                    { key: "combined", color: "#c75080", label: `${last.combined || 0}%` },
-                    { key: "experiences", color: "#7a68a8", label: `${last.experiences || 0}%` },
-                    { key: "delivery", color: "#1a2a4a", label: `${last.delivery || 0}%` },
+                    { key: "combined", color: T.pink, label: `${last.combined || 0}%` },
+                    { key: "experiences", color: T.purple, label: `${last.experiences || 0}%` },
+                    { key: "delivery", color: T.blue, label: `${last.delivery || 0}%` },
                   ].map(({ key, color, label }) => (
                     <g key={key}>
                       <circle cx={xS(penTrend.length - 1)} cy={yS(last[key] || 0)} r={5} fill={color} />
                       <text x={xS(penTrend.length - 1) + 10} y={yS(last[key] || 0) + 4} fontSize={11} fontWeight={700} fill={color}>{label}</text>
                     </g>
                   ))}
-                  {[{ label: "Delivery", color: "#1a2a4a", x: ptPadL }, { label: "Experiences", color: "#7a68a8", x: ptPadL + 100 }, { label: "Combined", color: "#c75080", x: ptPadL + 230 }].map((l) => (
+                  {[{ label: "Delivery", color: T.blue, x: ptPadL }, { label: "Experiences", color: T.purple, x: ptPadL + 100 }, { label: "Combined", color: T.pink, x: ptPadL + 230 }].map((l) => (
                     <g key={l.label}>
                       <line x1={l.x} y1={12} x2={l.x + 20} y2={12} stroke={l.color} strokeWidth={2.5} />
                       <text x={l.x + 24} y={15} fontSize={10} fontWeight={600} fill={l.color}>{l.label}</text>
@@ -1258,9 +1258,9 @@ export default function Dashboard() {
                   {deviation.map((m, i) => {
                     const cx = xScale(i);
                     const bars = [
-                      { key: "delivery", color: "#1a2a4a", offset: -barW * 1.1 },
-                      { key: "experiences", color: "#7a68a8", offset: 0 },
-                      { key: "total", color: "#c75080", offset: barW * 1.1 },
+                      { key: "delivery", color: T.blue, offset: -barW * 1.1 },
+                      { key: "experiences", color: T.purple, offset: 0 },
+                      { key: "total", color: T.pink, offset: barW * 1.1 },
                     ];
                     return (
                       <g key={i}>
@@ -1279,7 +1279,7 @@ export default function Dashboard() {
                       </g>
                     );
                   })}
-                  {[{ label: "Delivery", color: "#1a2a4a", x: padL }, { label: "Experiences", color: "#7a68a8", x: padL + 100 }, { label: "Total", color: "#c75080", x: padL + 220 }].map((l) => (
+                  {[{ label: "Delivery", color: T.blue, x: padL }, { label: "Experiences", color: T.purple, x: padL + 100 }, { label: "Total", color: T.pink, x: padL + 220 }].map((l) => (
                     <g key={l.label}>
                       <rect x={l.x} y={2} width={14} height={10} fill={l.color} rx={2} />
                       <text x={l.x + 18} y={11} fontSize={10} fontWeight={600} fill={l.color}>{l.label}</text>
@@ -1316,11 +1316,11 @@ export default function Dashboard() {
                   <Section title="Penetration — So Far This Month">
                     <div style={{ display: "flex", justifyContent: "center", gap: 40, padding: "16px 0" }}>
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 48, fontWeight: 900, color: "#4a3580" }}>{pen.this_month?.experiences != null ? `${pen.this_month.experiences}%` : "—"}</div>
+                        <div style={{ fontSize: 48, fontWeight: 900, color: T.purple }}>{pen.this_month?.experiences != null ? `${pen.this_month.experiences}%` : "—"}</div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: 1, textTransform: "uppercase", marginTop: 4 }}>Experiences</div>
                       </div>
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 48, fontWeight: 900, color: "#1a2a4a" }}>{pen.this_month?.delivery != null ? `${pen.this_month.delivery}%` : "—"}</div>
+                        <div style={{ fontSize: 48, fontWeight: 900, color: T.blue }}>{pen.this_month?.delivery != null ? `${pen.this_month.delivery}%` : "—"}</div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: 1, textTransform: "uppercase", marginTop: 4 }}>Delivery</div>
                       </div>
                     </div>
@@ -1328,11 +1328,11 @@ export default function Dashboard() {
                   <Section title="Penetration — Last Month">
                     <div style={{ display: "flex", justifyContent: "center", gap: 40, padding: "16px 0" }}>
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 48, fontWeight: 900, color: "#4a3580", opacity: 0.6 }}>{pen.last_month?.experiences != null ? `${pen.last_month.experiences}%` : "—"}</div>
+                        <div style={{ fontSize: 48, fontWeight: 900, color: T.purple, opacity: 0.6 }}>{pen.last_month?.experiences != null ? `${pen.last_month.experiences}%` : "—"}</div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: 1, textTransform: "uppercase", marginTop: 4 }}>Experiences</div>
                       </div>
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 48, fontWeight: 900, color: "#1a2a4a", opacity: 0.6 }}>{pen.last_month?.delivery != null ? `${pen.last_month.delivery}%` : "—"}</div>
+                        <div style={{ fontSize: 48, fontWeight: 900, color: T.blue, opacity: 0.6 }}>{pen.last_month?.delivery != null ? `${pen.last_month.delivery}%` : "—"}</div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: 1, textTransform: "uppercase", marginTop: 4 }}>Delivery</div>
                       </div>
                     </div>
@@ -1350,9 +1350,9 @@ export default function Dashboard() {
                 {penTrend.length > 0 && (
                   <div style={{ display: "flex", gap: 28, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
                     {[
-                      { label: "Combined", value: `${penTrend[penTrend.length - 1]?.combined || 0}%`, color: "#c75080" },
-                      { label: "Experiences", value: `${penTrend[penTrend.length - 1]?.experiences || 0}%`, color: "#7a68a8" },
-                      { label: "Delivery", value: `${penTrend[penTrend.length - 1]?.delivery || 0}%`, color: "#1a2a4a" },
+                      { label: "Combined", value: `${penTrend[penTrend.length - 1]?.combined || 0}%`, color: T.pink },
+                      { label: "Experiences", value: `${penTrend[penTrend.length - 1]?.experiences || 0}%`, color: T.purple },
+                      { label: "Delivery", value: `${penTrend[penTrend.length - 1]?.delivery || 0}%`, color: T.blue },
                     ].map((m) => (
                       <div key={m.label} style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: T.textDim }}>{m.label}</div>
@@ -1401,17 +1401,17 @@ export default function Dashboard() {
                             <text x={padL - 8} y={yS(maxVal * f) + 4} textAnchor="end" fontSize={9} fill={T.textDim}>${(maxVal * f / 1000).toFixed(0)}K</text>
                           </g>
                         ))}
-                        <path d={mkArea("worked")} fill="#1a2a4a" opacity={0.15} />
-                        <path d={mkPath("worked")} fill="none" stroke="#1a2a4a" strokeWidth={2.5} strokeLinejoin="round" />
+                        <path d={mkArea("worked")} fill={T.blue} opacity={0.15} />
+                        <path d={mkPath("worked")} fill="none" stroke={T.blue} strokeWidth={2.5} strokeLinejoin="round" />
                         {hasBooked && <>
-                          <path d={mkArea("booked")} fill="#7a68a8" opacity={0.12} />
-                          <path d={mkPath("booked")} fill="none" stroke="#7a68a8" strokeWidth={2} strokeLinejoin="round" />
+                          <path d={mkArea("booked")} fill={T.purple} opacity={0.12} />
+                          <path d={mkPath("booked")} fill="none" stroke={T.purple} strokeWidth={2} strokeLinejoin="round" />
                         </>}
                         {validDelta.length > 0 && (
                           <>
-                            <text x={xS(validDelta.length - 1) + 6} y={yS(validDelta[validDelta.length - 1].worked) + 4} fontSize={9} fontWeight={700} fill="#1a2a4a">{fmtK(validDelta[validDelta.length - 1].worked)}</text>
+                            <text x={xS(validDelta.length - 1) + 6} y={yS(validDelta[validDelta.length - 1].worked) + 4} fontSize={9} fontWeight={700} fill={T.blue}>{fmtK(validDelta[validDelta.length - 1].worked)}</text>
                             {hasBooked && validDelta[validDelta.length - 1].booked != null && (
-                              <text x={xS(validDelta.length - 1) + 6} y={yS(validDelta[validDelta.length - 1].booked) + 4} fontSize={9} fontWeight={700} fill="#7a68a8">{fmtK(validDelta[validDelta.length - 1].booked)}</text>
+                              <text x={xS(validDelta.length - 1) + 6} y={yS(validDelta[validDelta.length - 1].booked) + 4} fontSize={9} fontWeight={700} fill={T.purple}>{fmtK(validDelta[validDelta.length - 1].booked)}</text>
                             )}
                           </>
                         )}
@@ -1420,11 +1420,11 @@ export default function Dashboard() {
                             <text key={i} x={xS(i)} y={wbH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month}</text>
                           )
                         ))}
-                        <circle cx={padL + 6} cy={8} r={4} fill="#1a2a4a" />
-                        <text x={padL + 14} y={11} fontSize={10} fontWeight={600} fill="#1a2a4a">WORKED</text>
+                        <circle cx={padL + 6} cy={8} r={4} fill={T.blue} />
+                        <text x={padL + 14} y={11} fontSize={10} fontWeight={600} fill={T.blue}>WORKED</text>
                         {hasBooked && <>
-                          <circle cx={padL + 96} cy={8} r={4} fill="#7a68a8" />
-                          <text x={padL + 104} y={11} fontSize={10} fontWeight={600} fill="#7a68a8">BOOKED</text>
+                          <circle cx={padL + 96} cy={8} r={4} fill={T.purple} />
+                          <text x={padL + 104} y={11} fontSize={10} fontWeight={600} fill={T.purple}>BOOKED</text>
                         </>}
                       </svg>
                     </Section>
