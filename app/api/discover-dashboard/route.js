@@ -31,7 +31,7 @@ export async function GET(request) {
     }
 
     // Fetch dashboard structure
-    const dashboard = await apiRequest(`/dashboards/${dashboardId}`);
+    const dashboard = await apiRequest(`/sights/${dashboardId}`);
 
     const summary = {
       id: dashboard.id,
@@ -90,3 +90,4 @@ export async function GET(request) {
     return Response.json({ error: err.message }, { status: 500 });
   }
 }
+
