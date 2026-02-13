@@ -1,11 +1,6 @@
 /**
  * Department Health API — Delivery & Experiences
- * Fetches from 5 Smartsheet sources:
- *   - Revenue Trend Pivot (sheet)
- *   - E&D Utilization (report)
- *   - Integrated Project Status (report)
- *   - Penetration This Month (sheet)
- *   - Penetration Last Month (sheet)
+ * v2 — Fixed column mapping for reports, section detection, penetration calculation
  */
 
 export const dynamic = "force-dynamic";
@@ -41,14 +36,28 @@ function parsePercent(val) {
   const s = String(val).replace(/%/g, "").trim();
   const n = parseFloat(s);
   if (isNaN(n)) return 0;
-  return n < 1 && n > 0 ? Math.round(n * 100) : Math.round(n);
+  // If value is like 0.47438, it's a decimal — convert to percentage
+  return n > 0 && n < 1 ? Math.round(n * 100) : Math.round(n);
 }
 
 // ---------------------------------------------------------------------------
-// Revenue Trend Pivot — multi-section sheet (65 rows)
-// Sections: TOTAL EFFORT, BOOKED REVENUE, DEVIATION, etc.
-// Each section has header row, sub-header (Delivery | Experiences | Total | Adjusted Total)
-// Then monthly rows: YYYY-MM | val | val | val | val
+// Report row → object using POSITIONAL column mapping
+// Reports return cells with source-sheet columnIds that don't match report
+// column IDs. The only reliable approach is positional: cells[i] → columns[i].
+// ---------------------------------------------------------------------------
+function reportRowToObject(row, columns) {
+  const obj = {};
+  const cells = row.cells || [];
+  for (let i = 0; i < cells.length && i < columns.length; i++) {
+    const title = columns[i].title;
+    obj[title] = cells[i].displayValue != null ? cells[i].displayValue : cells[i].value;
+  }
+  return obj;
+}
+
+// ---------------------------------------------------------------------------
+// Revenue Trend Pivot — multi-section sheet
+// Sections separated by blank rows, headers can be short (e.g. "OS")
 // ---------------------------------------------------------------------------
 function parseRevenuePivot(rows, columns) {
   const colMap = {};
@@ -64,104 +73,111 @@ function parseRevenuePivot(rows, columns) {
       cells[name] = cell.displayValue || cell.value;
     }
 
-    const firstVal = Object.values(cells)[0];
+    // Get value from first column
+    const firstColTitle = columns[0] ? colMap[columns[0].id] : Object.keys(cells)[0];
+    const firstVal = cells[firstColTitle];
     const firstStr = String(firstVal || "").trim();
 
-    // Detect section header: ALL CAPS, no numbers
-    if (firstStr && firstStr === firstStr.toUpperCase() && !/\d{4}-\d{2}/.test(firstStr) && firstStr.length > 3) {
-      currentSection = firstStr;
-      if (!sections[currentSection]) sections[currentSection] = [];
+    // Empty row — skip (section boundary)
+    if (!firstStr || firstStr === "undefined" || firstStr === "null") {
       continue;
     }
 
-    // Skip sub-header rows (contain "Delivery", "Experiences", etc.)
-    if (/^(delivery|experiences|total|adjusted)/i.test(firstStr)) continue;
-
     // Data row: starts with YYYY-MM
-    if (/^\d{4}-\d{2}$/.test(firstStr) && currentSection) {
-      const vals = Object.values(cells);
-      sections[currentSection].push({
-        month: firstStr,
-        delivery: parseCurrency(vals[1]),
-        experiences: parseCurrency(vals[2]),
-        total: parseCurrency(vals[3]),
-        adjusted: parseCurrency(vals[4]),
-      });
+    if (/^\d{4}-\d{2}$/.test(firstStr)) {
+      if (currentSection) {
+        sections[currentSection].push({
+          month: firstStr,
+          delivery: parseCurrency(cells["Delivery"]),
+          experiences: parseCurrency(cells["Experiences"]),
+          total: parseCurrency(cells["Total"]),
+          adjusted: parseCurrency(cells["Adjusted"]),
+        });
+      }
+      continue;
+    }
+
+    // Sub-header rows (column labels like "Delivery", "Experiences", "Total")
+    if (/^(delivery|experiences|total|adjusted)/i.test(firstStr)) {
+      continue;
+    }
+
+    // Anything else that is text (not starting with a digit) = section header
+    // No minimum length — handles short names like "OS"
+    if (firstStr && !/^\d/.test(firstStr)) {
+      currentSection = firstStr.toUpperCase();
+      if (!sections[currentSection]) sections[currentSection] = [];
+      continue;
     }
   }
+
   return sections;
 }
 
 // ---------------------------------------------------------------------------
-// E&D Utilization Report (13 rows)
-// Columns: "ROLE - Name", Utilization %, Billable %, Admin Time %
+// E&D Utilization Report — POSITIONAL column mapping
+// Columns (by position): Primary, Team Member, Utilization, Billable, Admin Time
+// Primary has "ROLE - Name", values are decimals like 0.47
 // ---------------------------------------------------------------------------
 function parseUtilization(rows, columns) {
-  const colMap = {};
-  for (const col of columns) colMap[col.id] = col.title;
-
   return rows.map((row) => {
-    const item = {};
-    for (const cell of row.cells || []) {
-      const name = colMap[cell.columnId] || "";
-      item[name] = cell.displayValue || cell.value;
-    }
-    // Find the name column (first text column, often "Team Member" or first col)
-    const nameCol = Object.keys(item).find((k) => /team|member|name/i.test(k)) || Object.keys(item)[0];
-    const nameVal = String(item[nameCol] || "").trim();
+    const item = reportRowToObject(row, columns);
+
+    // Get the name from "Team Member" or "Primary"
+    let nameVal = item["Team Member"] || item["Primary"] || "";
+    nameVal = String(nameVal).trim();
     if (!nameVal) return null;
 
-    // Extract role from "ROLE - Name" format
+    // Extract role from "ROLE - Name" pattern in Primary column
+    const primaryVal = String(item["Primary"] || "").trim();
     let role = "Unknown", name = nameVal;
-    if (nameVal.includes(" - ")) {
-      const parts = nameVal.split(" - ");
+    if (primaryVal.includes(" - ")) {
+      const parts = primaryVal.split(" - ");
       role = parts[0].trim();
       name = parts.slice(1).join(" - ").trim();
     }
 
+    // Parse percentages — values are decimals (0.47) or display strings ("47%")
+    const util = parsePercent(item["Utilization"]);
+    const bill = parsePercent(item["Billable"]);
+    const admin = parsePercent(item["Admin Time"]);
+
     return {
       name,
       role,
-      utilization: parsePercent(item["Utilization %"] || item["Utilization"]),
-      billable: parsePercent(item["Billable %"] || item["Billable"]),
-      admin_time: parsePercent(item["Admin Time %"] || item["Admin Time"] || item["Admin"]),
-      non_billable: 0, // calculated below
+      utilization: util,
+      billable: bill,
+      admin_time: admin,
+      non_billable: Math.max(0, util - bill),
     };
-  }).filter(Boolean).map((t) => {
-    t.non_billable = Math.max(0, (t.utilization || 0) - (t.billable || 0));
-    return t;
-  });
+  }).filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
-// Integrated Project Status Report (26 rows)
-// Has unique fields not in main report: Top Priority, Last Weeks Deviation, etc.
+// Integrated Project Status Report — POSITIONAL column mapping
 // ---------------------------------------------------------------------------
 function parseIntegrated(rows, columns) {
-  const colMap = {};
-  for (const col of columns) colMap[col.id] = col.title;
-
   return rows.map((row) => {
-    const item = {};
-    for (const cell of row.cells || []) {
-      const name = colMap[cell.columnId] || "";
-      item[name] = cell.displayValue || cell.value;
-    }
+    const item = reportRowToObject(row, columns);
+
+    const ragRaw = String(item["RAG"] || "").toLowerCase().trim();
+    const rag = ["green", "yellow", "red", "blue"].includes(ragRaw) ? ragRaw : "unknown";
+
     return {
       rid: item["RID"] || "-",
       client: item["Client"] || "-",
       project_name: item["Assignment Title"] || item["Assignment"] || "-",
-      ecosystem: item["Owning Ecosystem"] || item["Ecosystem"] || "-",
-      rag: (item["RAG"] || "").toLowerCase().trim() || "unknown",
+      ecosystem: item["Owning Ecosystem"] || "-",
+      rag,
       budget_forecast: parseCurrency(item["Budget Forecast"]),
       actuals: parseCurrency(item["Actuals"]),
       overage: parseCurrency(item["Overage"]),
-      percent_complete: parsePercent(item["Work Progress"] || item["% Complete"]),
+      percent_complete: parsePercent(item["% Complete"] || item["Work Progress"]),
       top_priority: item["Top Priority"] || null,
-      last_weeks_deviation: parseCurrency(item["Last Weeks Deviation"] || item["Last Week's Deviation"]),
+      last_weeks_deviation: parseCurrency(item["Last Weeks Deviation"]),
       creative_retainer: item["Creative Retainer"] || null,
       resource_status: item["Resource Status"] || "-",
-      pm: item["PM/PROD Assigned"] || item["PM/Prod Assigned"] || "-",
+      pm: item["PM/PROD Assigned"] || "-",
       integrated_actuals_pct: parsePercent(item["INTEGRATED Actuals %"]),
       monthly_budget: parseCurrency(item["Monthly Budget"]),
     };
@@ -169,48 +185,61 @@ function parseIntegrated(rows, columns) {
 }
 
 // ---------------------------------------------------------------------------
-// Penetration Sheet Parser
-// Small sheets with Experiences % and Delivery % values
+// Penetration Calculator
+// Replicates the Smartsheet SUMIF formulas from the raw Time & Fees data:
+//   Experiences = SUM(disciplines) / total incurred
+//   Delivery = SUM(disciplines) / total incurred
 // ---------------------------------------------------------------------------
-function parsePenetrationSheet(raw) {
-  if (!raw || !raw.rows) return { experiences: null, delivery: null };
-  const colMap = {};
-  for (const col of raw.columns || []) colMap[col.id] = col.title;
+function calculatePenetration(raw) {
+  if (!raw || !raw.rows || !raw.columns) return { experiences: null, delivery: null };
 
-  const result = { experiences: null, delivery: null };
-  const allCells = [];
+  // Find column IDs for Discipline and Incurred (currency)
+  let disciplineColId = null;
+  let incurredColId = null;
+  for (const col of raw.columns) {
+    const t = (col.title || "").toLowerCase();
+    if (t === "discipline") disciplineColId = col.id;
+    if (t.includes("incurred") && t.includes("currency")) incurredColId = col.id;
+  }
+
+  if (!disciplineColId || !incurredColId) {
+    return { experiences: null, delivery: null };
+  }
+
+  const EXP_DISCIPLINES = [
+    "CREATIVE COPYWRITER", "CREATIVE STRATEGY", "DESIGN",
+    "DIGITAL PRODUCER", "INTEGRATED STRATEGY", "STUDIO MANAGEMENT", "TECH DEV",
+  ];
+  const DEL_DISCIPLINES = ["IPM", "SUPPORT"];
+
+  let totalIncurred = 0;
+  let expIncurred = 0;
+  let delIncurred = 0;
 
   for (const row of raw.rows) {
-    const rowData = {};
+    let discipline = null;
+    let incurred = 0;
     for (const cell of row.cells || []) {
-      const colName = colMap[cell.columnId] || "";
-      const val = cell.displayValue || cell.value;
-      rowData[colName] = val;
-      if (val != null) allCells.push({ colName, val: String(val), rowId: row.id });
+      if (cell.columnId === disciplineColId) {
+        discipline = String(cell.value || cell.displayValue || "").toUpperCase().trim();
+      }
+      if (cell.columnId === incurredColId) {
+        incurred = parseCurrency(cell.value != null ? cell.value : cell.displayValue);
+      }
     }
-    const vals = Object.values(rowData).map((v) => String(v || ""));
-    const hasExp = vals.some((v) => /experiences/i.test(v));
-    const hasDel = vals.some((v) => /delivery/i.test(v));
-    const pctVal = vals.find((v) => v.match(/^\d+%?$/) || v.match(/^\d+\.\d+%?$/));
-    const pctNum = pctVal ? parseFloat(pctVal.replace(/%/, "")) : null;
-    if (hasExp && pctNum != null) result.experiences = pctNum;
-    if (hasDel && pctNum != null) result.delivery = pctNum;
+    if (incurred !== 0) {
+      totalIncurred += incurred;
+      if (discipline && EXP_DISCIPLINES.includes(discipline)) expIncurred += incurred;
+      if (discipline && DEL_DISCIPLINES.includes(discipline)) delIncurred += incurred;
+    }
   }
 
-  // Fallback: if exactly 2 rows with percentages, assume first=Experiences, second=Delivery
-  if (result.experiences == null && result.delivery == null) {
-    const pctCells = allCells.filter((c) => {
-      const sv = String(c.val);
-      return sv.match(/^\d+%?$/) && parseFloat(sv) <= 100;
-    });
-    if (pctCells.length >= 2) {
-      result.experiences = parseFloat(pctCells[0].val);
-      result.delivery = parseFloat(pctCells[1].val);
-    } else if (pctCells.length === 1) {
-      result.experiences = parseFloat(pctCells[0].val);
-    }
-  }
-  return result;
+  if (totalIncurred === 0) return { experiences: null, delivery: null };
+
+  return {
+    experiences: Math.round((expIncurred / totalIncurred) * 100),
+    delivery: Math.round((delIncurred / totalIncurred) * 100),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -228,17 +257,17 @@ export async function GET() {
     const [revenueRaw, utilizationRaw, integratedRaw, penThisRaw, penLastRaw] = await Promise.all([
       apiRequest(`/sheets/${REVENUE_PIVOT_SHEET}?pageSize=10000`),
       apiRequest(`/reports/${UTILIZATION_REPORT}?pageSize=100`),
-      apiRequest(`/reports/${INTEGRATED_REPORT}?pageSize=100&include=sourceSheets`),
-      apiRequest(`/sheets/${PENETRATION_THIS_MONTH}?pageSize=100`).catch(() => null),
-      apiRequest(`/sheets/${PENETRATION_LAST_MONTH}?pageSize=100`).catch(() => null),
+      apiRequest(`/reports/${INTEGRATED_REPORT}?pageSize=100`),
+      apiRequest(`/sheets/${PENETRATION_THIS_MONTH}?pageSize=10000`).catch(() => null),
+      apiRequest(`/sheets/${PENETRATION_LAST_MONTH}?pageSize=10000`).catch(() => null),
     ]);
 
     // Parse each source
     const revenueSections = parseRevenuePivot(revenueRaw.rows || [], revenueRaw.columns || []);
     const utilization = parseUtilization(utilizationRaw.rows || [], utilizationRaw.columns || []);
     const integrated = parseIntegrated(integratedRaw.rows || [], integratedRaw.columns || []);
-    const penThis = parsePenetrationSheet(penThisRaw);
-    const penLast = parsePenetrationSheet(penLastRaw);
+    const penThis = calculatePenetration(penThisRaw);
+    const penLast = calculatePenetration(penLastRaw);
 
     // -----------------------------------------------------------------------
     // Aggregate utilization
@@ -299,21 +328,22 @@ export async function GET() {
     };
 
     // -----------------------------------------------------------------------
-    // Revenue summary from TOTAL EFFORT section
+    // Revenue summary — use latest month with non-zero data
     // -----------------------------------------------------------------------
     const effort = revenueSections["TOTAL EFFORT"] || [];
-    const latestMonth = effort.length > 0 ? effort[effort.length - 1] : null;
-    const prevMonth = effort.length > 1 ? effort[effort.length - 2] : null;
+    const latestNonZero = [...effort].reverse().find((m) => m.total > 0);
+    const latestIdx = latestNonZero ? effort.indexOf(latestNonZero) : -1;
+    const prevMonth = latestIdx > 0 ? effort[latestIdx - 1] : null;
     const revenueSummary = {
-      latest_month: latestMonth?.month || null,
-      latest_total: latestMonth?.total || 0,
-      latest_delivery: latestMonth?.delivery || 0,
-      latest_experiences: latestMonth?.experiences || 0,
-      mom_change: (latestMonth && prevMonth && prevMonth.total > 0)
-        ? Math.round(((latestMonth.total - prevMonth.total) / prevMonth.total) * 1000) / 10
+      latest_month: latestNonZero?.month || null,
+      latest_total: latestNonZero?.total || 0,
+      latest_delivery: latestNonZero?.delivery || 0,
+      latest_experiences: latestNonZero?.experiences || 0,
+      mom_change: (latestNonZero && prevMonth && prevMonth.total > 0)
+        ? Math.round(((latestNonZero.total - prevMonth.total) / prevMonth.total) * 1000) / 10
         : null,
-      delivery_share: latestMonth && latestMonth.total > 0
-        ? Math.round((latestMonth.delivery / latestMonth.total) * 1000) / 10
+      delivery_share: latestNonZero && latestNonZero.total > 0
+        ? Math.round((latestNonZero.delivery / latestNonZero.total) * 1000) / 10
         : null,
     };
 
@@ -328,50 +358,6 @@ export async function GET() {
       penetration: {
         this_month: penThis,
         last_month: penLast,
-      },
-      _debug_penetration: {
-        this_month_sheet: penThisRaw?.name || "failed to fetch",
-        last_month_sheet: penLastRaw?.name || "failed to fetch",
-        this_month_rows: penThisRaw?.totalRowCount || 0,
-        last_month_rows: penLastRaw?.totalRowCount || 0,
-      },
-      // DEBUG: raw column names and first row for each source
-      _debug_columns: {
-        revenue_columns: (revenueRaw.columns || []).map((c) => ({ id: c.id, title: c.title })),
-        revenue_first_3_rows: (revenueRaw.rows || []).slice(0, 3).map((r) => {
-          const obj = {};
-          for (const cell of r.cells || []) {
-            const col = (revenueRaw.columns || []).find((c) => c.id === cell.columnId);
-            obj[col?.title || cell.columnId] = cell.displayValue || cell.value;
-          }
-          return obj;
-        }),
-        revenue_rows_10_to_18: (revenueRaw.rows || []).slice(10, 18).map((r, idx) => {
-          const obj = { _row_index: 10 + idx };
-          for (const cell of r.cells || []) {
-            const col = (revenueRaw.columns || []).find((c) => c.id === cell.columnId);
-            obj[col?.title || cell.columnId] = cell.displayValue || cell.value;
-          }
-          return obj;
-        }),
-        utilization_columns: (utilizationRaw.columns || []).map((c) => ({ id: c.id, title: c.title, virtualId: c.virtualId })),
-        utilization_first_row: (utilizationRaw.rows || []).slice(0, 1).map((r) => {
-          const obj = {};
-          for (const cell of r.cells || []) {
-            const col = (utilizationRaw.columns || []).find((c) => c.id === cell.columnId);
-            obj[col?.title || cell.columnId] = { display: cell.displayValue, value: cell.value };
-          }
-          return obj;
-        }),
-        integrated_columns: (integratedRaw.columns || []).map((c) => ({ id: c.id, title: c.title, virtualId: c.virtualId })),
-        integrated_first_row: (integratedRaw.rows || []).slice(0, 1).map((r) => {
-          const obj = {};
-          for (const cell of r.cells || []) {
-            const col = (integratedRaw.columns || []).find((c) => c.id === cell.columnId);
-            obj[col?.title || cell.columnId] = { display: cell.displayValue, value: cell.value };
-          }
-          return obj;
-        }),
       },
     }, {
       headers: { "Cache-Control": "no-store, max-age=0" },
