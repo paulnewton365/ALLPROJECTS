@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.3";
+const APP_VERSION = "1.10.6";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -313,12 +313,12 @@ function StackedPipeline({ data, displayNames, ensureEcosystems }) {
   return (
     <div>
       {allEcos.map((eco) => (
-        <div key={eco.ecosystem} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div key={eco.ecosystem} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
           <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco.ecosystem] || T.textMuted }}>{eco.ecosystem}</div>
-          <div style={{ flex: 1, height: 36, background: T.bgHover, borderRadius: 6, overflow: "hidden", display: "flex" }}>
+          <div style={{ flex: 1, height: 48, background: T.bgHover, borderRadius: 6, overflow: "hidden", display: "flex" }}>
             {eco.stages.filter((st) => st.weighted > 0).map((st) => {
               const sn = stageName(st.stage, displayNames);
-              return <div key={st.stage} title={`${sn}: ${st.count} deals, ${fmtK(st.weighted)} wtd`} style={{ width: `${(st.weighted / maxW) * 100}%`, background: STAGE_COLORS[sn] || T.textDim, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", minWidth: 4, borderRight: "1px solid rgba(255,255,255,0.3)" }}>{(st.weighted / maxW) * 100 > 8 ? st.count : ""}</div>;
+              return <div key={st.stage} title={`${sn}: ${st.count} deals, ${fmtK(st.weighted)} wtd`} style={{ width: `${(st.weighted / maxW) * 100}%`, background: STAGE_COLORS[sn] || T.textDim, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", minWidth: 4, borderRight: "1px solid rgba(255,255,255,0.3)" }}>{(st.weighted / maxW) * 100 > 8 ? st.count : ""}</div>;
             })}
             {eco.total_weighted === 0 && <div style={{ display: "flex", alignItems: "center", paddingLeft: 10, fontSize: 10, color: T.textDim }}>No active pipeline</div>}
           </div>
@@ -599,7 +599,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const VALID_TABS = ["overview", "live", "pipeline", "dept"];
+  const VALID_TABS = ["overview", "live", "redlist", "newbiz", "internal", "dept"];
   const getTabFromHash = () => {
     if (typeof window === "undefined") return "overview";
     const h = window.location.hash.replace("#", "").toLowerCase();
@@ -757,7 +757,7 @@ export default function Dashboard() {
                     </div>
                     <div style={{ textAlign: "right", minWidth: 100, flexShrink: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, fontFamily: "monospace", color: c.net > 0 ? T.red : T.green }}>{fmtK(c.net)}</div>
-                      {c.investment > 0 && <div style={{ fontSize: 10, color: T.textDim }}>{fmtK(c.overage)} gross · {fmtK(c.investment)} inv</div>}
+                      {c.investment > 0 && <div style={{ fontSize: 10, color: T.textDim }}>{fmtK(c.investment)} invested</div>}
                     </div>
                   </div>
                 ))}
@@ -918,10 +918,10 @@ export default function Dashboard() {
 
               <div className="chart-row" style={s.chartRow}>
                 {/* Ecosystem Concentration (core only) */}
-                <Section title="Overservice by Ecosystem" subtitle="Core ecosystem projects only">
-                  <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+                <Section title="Distribution of Red Projects" subtitle="Core ecosystem projects only">
+                  <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
                     {/* Donut */}
-                    <svg width={160} height={160} viewBox="0 0 160 160" style={{ flexShrink: 0 }}>
+                    <svg width={180} height={180} viewBox="0 0 180 180" style={{ flexShrink: 0 }}>
                       {(() => {
                         const total = ecoEntries.reduce((s, [, v]) => s + v.overage, 0) || 1;
                         let cumAngle = -90;
@@ -932,28 +932,28 @@ export default function Dashboard() {
                           const endRad = ((cumAngle + angle) * Math.PI) / 180;
                           cumAngle += pctVal * 360;
                           const large = angle > 180 ? 1 : 0;
-                          const r = 65, cx = 80, cy = 80;
+                          const r = 75, cx = 90, cy = 90;
                           const x1 = cx + r * Math.cos(startRad), y1 = cy + r * Math.sin(startRad);
                           const x2 = cx + r * Math.cos(endRad), y2 = cy + r * Math.sin(endRad);
                           return <path key={name} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z`} fill={ECO_COLORS[name] || [T.teal, T.orange, T.purple, T.textDim][i % 4]} opacity={0.85}><title>{name}: {fmtK(v.overage)} ({Math.round(pctVal * 100)}%)</title></path>;
                         });
                       })()}
-                      <circle cx={80} cy={80} r={35} fill={T.bgCard} />
-                      <text x={80} y={76} textAnchor="middle" fontSize="18" fontWeight="900" fill={T.red}>{coreReds.length}</text>
-                      <text x={80} y={92} textAnchor="middle" fontSize="9" fill={T.textDim}>projects</text>
+                      <circle cx={90} cy={90} r={40} fill={T.bgCard} />
+                      <text x={90} y={86} textAnchor="middle" fontSize="22" fontWeight="900" fill={T.red}>{coreReds.length}</text>
+                      <text x={90} y={104} textAnchor="middle" fontSize="10" fill={T.textDim}>projects</text>
                     </svg>
                     {/* Legend + detail */}
                     <div style={{ flex: 1 }}>
                       {ecoEntries.map(([name, v]) => (
-                        <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: "50%", background: ECO_COLORS[name] || T.textDim, flexShrink: 0 }} />
+                        <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: ECO_COLORS[name] || T.textDim, flexShrink: 0 }} />
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: ECO_COLORS[name] || T.textMuted }}>{name}</div>
-                            <div style={{ height: 8, background: T.bgHover, borderRadius: 4, marginTop: 3, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 4, background: T.red, width: `${(v.overage / maxEcoOv) * 100}%` }} /></div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: ECO_COLORS[name] || T.textMuted, marginBottom: 4 }}>{name}</div>
+                            <div style={{ height: 14, background: T.bgHover, borderRadius: 4, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 4, background: T.red, width: `${(v.overage / maxEcoOv) * 100}%` }} /></div>
                           </div>
-                          <div style={{ textAlign: "right", minWidth: 70 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: T.red }}>{fmtK(v.overage)}</div>
-                            <div style={{ fontSize: 10, color: T.textDim }}>{v.count} project{v.count !== 1 ? "s" : ""}</div>
+                          <div style={{ textAlign: "right", minWidth: 80 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: T.red }}>{fmtK(v.overage)}</div>
+                            <div style={{ fontSize: 11, color: T.textDim }}>{v.count} project{v.count !== 1 ? "s" : ""}</div>
                           </div>
                         </div>
                       ))}
@@ -1364,15 +1364,15 @@ export default function Dashboard() {
               <Section title="Penetration Trend" subtitle={`D&E share of total incurred revenue · ${penTrend.length} data points · Baseline: Dec 2025 (Exp 10%, Del 6%)`}>
                 {penetrationTrendChart || <div style={{ color: T.textDim, fontSize: 12, padding: 20 }}>Insufficient data for chart (need ≥2 months). Penetration history will accumulate automatically.</div>}
                 {penTrend.length > 0 && (
-                  <div style={{ display: "flex", gap: 28, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 40, marginTop: 20, justifyContent: "center", flexWrap: "wrap" }}>
                     {[
                       { label: "Combined", value: `${penTrend[penTrend.length - 1]?.combined || 0}%`, color: T.pink },
                       { label: "Experiences", value: `${penTrend[penTrend.length - 1]?.experiences || 0}%`, color: T.purple },
                       { label: "Delivery", value: `${penTrend[penTrend.length - 1]?.delivery || 0}%`, color: T.blue },
                     ].map((m) => (
                       <div key={m.label} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: T.textDim }}>{m.label}</div>
-                        <div style={{ fontSize: 22, fontWeight: 900, color: m.color }}>{m.value}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: T.textDim }}>{m.label}</div>
+                        <div style={{ fontSize: 36, fontWeight: 900, color: m.color }}>{m.value}</div>
                       </div>
                     ))}
                   </div>
@@ -1539,14 +1539,14 @@ export default function Dashboard() {
               {/* Integrated RAG + Weekly Deviation */}
               <div className="chart-row" style={{ ...s.chartRow, marginBottom: 16 }}>
                 <Section title="Integrated RAG Status" subtitle={`${is_.total_projects || 0} integrated projects`}>
-                  <div style={{ display: "flex", gap: 14, justifyContent: "center", padding: "12px 0" }}>
+                  <div style={{ display: "flex", gap: 16, justifyContent: "center", padding: "24px 0" }}>
                     {["green", "yellow", "red", "blue"].map((color) => {
                       const count = (is_.rag || {})[color] || 0;
                       const r = RAG[color];
                       return (
-                        <div key={color} style={{ textAlign: "center", padding: "10px 14px", borderRadius: 8, background: r.bg, minWidth: 60 }}>
-                          <div style={{ fontSize: 22, fontWeight: 900, color: r.text }}>{count}</div>
-                          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: r.text }}>{r.label}</div>
+                        <div key={color} style={{ textAlign: "center", padding: "20px 24px", borderRadius: 10, background: r.bg, minWidth: 90, flex: 1 }}>
+                          <div style={{ fontSize: 36, fontWeight: 900, color: r.text }}>{count}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: r.text, marginTop: 4 }}>{r.label}</div>
                         </div>
                       );
                     })}
@@ -1612,7 +1612,12 @@ export default function Dashboard() {
         <div style={s.footer}>Generated {new Date(d.generated_at).toLocaleString()} · v{APP_VERSION}</div>
       </>)}
 
-      {loading && !data && <div style={{ textAlign: "center", padding: 80, color: T.textMuted }}><div style={{ fontSize: 32, marginBottom: 16, animation: "spin 1.5s ease-in-out infinite" }}>⟳</div><div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>One mo. Just having a look at the data on Smartsheet.</div><div style={{ fontSize: 12, color: T.textDim }}>This usually takes a few seconds…</div></div>}
+      {loading && !data && <div style={{ textAlign: "center", padding: "140px 20px", color: T.textMuted }}>
+        <div style={{ width: 56, height: 56, border: `4px solid ${T.border}`, borderTop: `4px solid ${T.blue}`, borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 24px" }} />
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>One mo. Just having a look at the data on Smartsheet.</div>
+        <div style={{ fontSize: 13, color: T.textDim }}>This usually takes a few seconds…</div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>}
     </div>
   </>);
 }
