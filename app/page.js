@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.6";
+const APP_VERSION = "1.10.7";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1206,13 +1206,12 @@ export default function Dashboard() {
             // Penetration trend line chart
             const penetrationTrendChart = (() => {
               if (penTrend.length < 2) return null;
-              const ptW = 900, ptH = 260, ptPadL = 50, ptPadR = 30, ptPadT = 30, ptPadB = 40;
+              const ptW = 900, ptH = 220, ptPadL = 50, ptPadR = 30, ptPadT = 30, ptPadB = 30;
               const ptPlotW = ptW - ptPadL - ptPadR, ptPlotH = ptH - ptPadT - ptPadB;
               const maxPct = Math.max(...penTrend.map((m) => Math.max(m.experiences || 0, m.delivery || 0, m.combined || 0)), 20);
               const yS = (v) => ptPadT + ptPlotH - (v / maxPct) * ptPlotH;
               const xS = (i) => ptPadL + (i / (penTrend.length - 1)) * ptPlotW;
               const mkLine = (key) => penTrend.map((m, i) => `${i === 0 ? "M" : "L"}${xS(i).toFixed(1)},${yS(m[key] || 0).toFixed(1)}`).join(" ");
-              const mkArea = (key) => `${mkLine(key)} L${xS(penTrend.length - 1).toFixed(1)},${yS(0).toFixed(1)} L${xS(0).toFixed(1)},${yS(0).toFixed(1)} Z`;
               const yTicks = Array.from({ length: 5 }, (_, i) => (maxPct / 4) * i);
               const last = penTrend[penTrend.length - 1];
               return (
@@ -1223,14 +1222,11 @@ export default function Dashboard() {
                       <text x={ptPadL - 8} y={yS(v) + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{Math.round(v)}%</text>
                     </g>
                   ))}
-                  <path d={mkArea("combined")} fill={T.pink} opacity={0.08} />
-                  <path d={mkArea("experiences")} fill={T.purple} opacity={0.12} />
-                  <path d={mkArea("delivery")} fill={T.blue} opacity={0.12} />
                   <path d={mkLine("combined")} fill="none" stroke={T.pink} strokeWidth={2.5} strokeLinejoin="round" />
                   <path d={mkLine("experiences")} fill="none" stroke={T.purple} strokeWidth={2} strokeLinejoin="round" />
                   <path d={mkLine("delivery")} fill="none" stroke={T.blue} strokeWidth={2} strokeLinejoin="round" />
                   {penTrend.map((m, i) => (
-                    <text key={i} x={xS(i)} y={ptH - 8} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month.replace(/^\d{4}-/, "")}</text>
+                    <text key={i} x={xS(i)} y={ptH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month.replace(/^\d{4}-/, "")}</text>
                   ))}
                   {[
                     { key: "combined", color: T.pink, label: `${last.combined || 0}%` },
@@ -1363,20 +1359,6 @@ export default function Dashboard() {
               {/* Penetration Trend */}
               <Section title="Penetration Trend" subtitle={`D&E share of total incurred revenue · ${penTrend.length} data points · Baseline: Dec 2025 (Exp 10%, Del 6%)`}>
                 {penetrationTrendChart || <div style={{ color: T.textDim, fontSize: 12, padding: 20 }}>Insufficient data for chart (need ≥2 months). Penetration history will accumulate automatically.</div>}
-                {penTrend.length > 0 && (
-                  <div style={{ display: "flex", gap: 40, marginTop: 20, justifyContent: "center", flexWrap: "wrap" }}>
-                    {[
-                      { label: "Combined", value: `${penTrend[penTrend.length - 1]?.combined || 0}%`, color: T.pink },
-                      { label: "Experiences", value: `${penTrend[penTrend.length - 1]?.experiences || 0}%`, color: T.purple },
-                      { label: "Delivery", value: `${penTrend[penTrend.length - 1]?.delivery || 0}%`, color: T.blue },
-                    ].map((m) => (
-                      <div key={m.label} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: T.textDim }}>{m.label}</div>
-                        <div style={{ fontSize: 36, fontWeight: 900, color: m.color }}>{m.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </Section>
               <div style={{ height: 16 }} />
 
@@ -1553,27 +1535,23 @@ export default function Dashboard() {
                   </div>
                 </Section>
                 <Section title="D&E Live Revenue per Ecosystem" subtitle={`Active projects only (excludes archived/completed) · Budget: ${fmtK(is_.total_budget || 0)} · Actuals: ${fmtK(is_.total_actuals || 0)}`}>
-                  <div style={{ padding: "8px 0" }}>
+                  <div style={{ padding: "4px 0" }}>
                     {Object.entries(is_.by_ecosystem || {}).filter(([eco]) => eco !== "-").sort((a, b) => b[1].actuals - a[1].actuals).map(([eco, ecoData]) => {
                       const maxBudget = Math.max(...Object.values(is_.by_ecosystem || {}).map((d) => d.budget), 1);
                       return (
-                        <div key={eco} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                        <div key={eco} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
                           <div style={{ width: 100, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco] || T.textMuted }}>{eco}</div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ display: "flex", gap: 2, height: 18, borderRadius: 4, overflow: "hidden", background: T.bgHover }}>
-                              <div style={{ width: `${(ecoData.actuals / maxBudget) * 100}%`, background: ECO_COLORS[eco] || T.blue, borderRadius: "4px 0 0 4px", minWidth: ecoData.actuals > 0 ? 2 : 0 }} title={`Actuals: ${fmtK(ecoData.actuals)}`} />
-                              <div style={{ width: `${(Math.max(0, ecoData.budget - ecoData.actuals) / maxBudget) * 100}%`, background: ECO_COLORS[eco] || T.blue, opacity: 0.25, borderRadius: "0 4px 4px 0", minWidth: ecoData.budget > ecoData.actuals ? 1 : 0 }} title={`Remaining: ${fmtK(ecoData.budget - ecoData.actuals)}`} />
+                            <div style={{ display: "flex", gap: 2, height: 28, borderRadius: 5, overflow: "hidden", background: T.bgHover }}>
+                              <div style={{ width: `${(ecoData.actuals / maxBudget) * 100}%`, background: ECO_COLORS[eco] || T.blue, borderRadius: "5px 0 0 5px", minWidth: ecoData.actuals > 0 ? 2 : 0 }} title={`Actuals: ${fmtK(ecoData.actuals)}`} />
+                              <div style={{ width: `${(Math.max(0, ecoData.budget - ecoData.actuals) / maxBudget) * 100}%`, background: ECO_COLORS[eco] || T.blue, opacity: 0.25, borderRadius: "0 5px 5px 0", minWidth: ecoData.budget > ecoData.actuals ? 1 : 0 }} title={`Remaining: ${fmtK(ecoData.budget - ecoData.actuals)}`} />
                             </div>
                           </div>
-                          <div style={{ width: 70, textAlign: "right", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>{fmtK(ecoData.actuals)}</div>
+                          <div style={{ width: 70, textAlign: "right", fontSize: 13, fontWeight: 700, fontFamily: "monospace" }}>{fmtK(ecoData.actuals)}</div>
                           <div style={{ width: 60, textAlign: "right", fontSize: 10, color: T.textDim }}>{ecoData.count} proj</div>
                         </div>
                       );
                     })}
-                    <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 10, color: T.textDim }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, display: "inline-block" }} /> Actuals</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, opacity: 0.25, display: "inline-block" }} /> Remaining Budget</span>
-                    </div>
                   </div>
                 </Section>
               </div>
