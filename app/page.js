@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.5";
+const APP_VERSION = "1.11.6";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1468,19 +1468,23 @@ export default function Dashboard() {
                         const bW = `${t.billable || 0}%`;
                         const aW = `${t.admin_time || 0}%`;
                         const nbW = `${Math.max(0, (t.utilization || 0) - (t.billable || 0) - (t.admin_time || 0))}%`;
+                        const tgt = t.utilization_target || 0;
+                        const diff = (t.utilization || 0) - tgt;
+                        const utilClr = !tgt ? utilColor(t.utilization || 0) : diff >= -2 ? T.green : diff >= -5 ? T.yellow : T.red;
                         return (
                           <tr key={i} style={{ background: i % 2 === 0 ? T.bgCard : T.bgCardAlt }}>
                             <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{t.name}</td>
                             <td style={{ ...s.td, fontSize: 11, color: T.textMuted }}>{t.role}</td>
-                            <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: utilColor(t.utilization || 0) }}>{pct(t.utilization)}</td>
+                            <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: utilClr }}>{pct(t.utilization)}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: t.utilization_target ? ((t.utilization || 0) >= t.utilization_target ? T.green : T.red) : T.textDim }}>{t.utilization_target ? pct(t.utilization_target) : "—"}</td>
                             <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: billableColor(t.billable || 0) }}>{pct(t.billable)}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{pct(t.admin_time)}</td>
                             <td style={s.td}>
-                              <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden", flex: 1, background: T.bgHover }}>
+                              <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden", flex: 1, background: T.bgHover, position: "relative" }}>
                                 <div style={{ width: bW, background: T.green }} title={`Billable: ${pct(t.billable)}`} />
                                 <div style={{ width: aW, background: T.yellow, opacity: 0.6 }} title={`Admin: ${pct(t.admin_time)}`} />
                                 <div style={{ width: nbW, background: T.blue, opacity: 0.4 }} title="Clientable" />
+                                {tgt > 0 && <div style={{ position: "absolute", left: `${tgt}%`, top: 0, bottom: 0, width: 2, background: T.red, zIndex: 2 }} title={`Target: ${tgt}%`} />}
                               </div>
                             </td>
                           </tr>
@@ -1492,6 +1496,7 @@ export default function Dashboard() {
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.green, display: "inline-block" }} /> Billable</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.yellow, opacity: 0.6, display: "inline-block" }} /> Admin</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, opacity: 0.4, display: "inline-block" }} /> Clientable</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 2, height: 10, background: T.red, display: "inline-block" }} /> Target</span>
                   </div>
                 </div>
               </Section>
