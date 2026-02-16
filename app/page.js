@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.9";
+const APP_VERSION = "1.12.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1480,7 +1480,7 @@ export default function Dashboard() {
                             <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{t.name}</td>
                             <td style={{ ...s.td, fontSize: 11, color: T.textMuted }}>{t.role}</td>
                             <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: utilClr }}>{pct(t.utilization)}</td>
-                            <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: t.utilization_target ? ((t.utilization || 0) >= t.utilization_target ? T.green : T.red) : T.textDim }}>{t.utilization_target ? pct(t.utilization_target) : "—"}</td>
+                            <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{t.utilization_target ? pct(t.utilization_target) : "—"}</td>
                             <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: billableColor(t.billable || 0) }}>{pct(t.billable)}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{pct(t.admin_time)}</td>
                             <td style={s.td}>
@@ -1582,6 +1582,86 @@ export default function Dashboard() {
                   </div>
                 </Section>
               </div>
+
+              {/* Client Archetypes — D&E Projects */}
+              {(() => {
+                const liveByRid = {};
+                (d.live.projects || []).forEach((p) => { if (p.rid) liveByRid[p.rid] = p; });
+                const fitByEco = {};
+                integ.forEach((p) => {
+                  const eco = p.ecosystem || "-";
+                  if (eco === "-") return;
+                  const match = liveByRid[p.rid];
+                  const fit = (match?.fit && match.fit !== "-") ? match.fit.trim() : "Unclassified";
+                  if (!fitByEco[eco]) fitByEco[eco] = {};
+                  fitByEco[eco][fit] = (fitByEco[eco][fit] || 0) + 1;
+                });
+                const ecos = Object.keys(fitByEco).sort();
+                if (!ecos.length) return null;
+                const FIT_COLORS = { "Builder": "#2a8f4e", "Storyteller": "#3b73c4", "Amplifier": "#c49a1a", "Transformer": "#7c5cbf", "Unclassified": "#c8c2b8" };
+                const allFitTypes = new Set();
+                ecos.forEach((eco) => Object.keys(fitByEco[eco]).forEach((f) => allFitTypes.add(f)));
+                const fitColors = {};
+                const defaultCols = [T.green, T.blue, T.yellow, T.purple, T.orange, T.pink, T.teal, T.red, T.textDim];
+                let ci = 0;
+                [...allFitTypes].forEach((f) => { fitColors[f] = FIT_COLORS[f] || defaultCols[ci++ % defaultCols.length]; });
+
+                return (<>
+                  <Section title="Client Archetypes by Ecosystem" subtitle={`FIT classification across ${integ.length} D&E integrated projects`}>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(ecos.length, 4)}, 1fr)`, gap: 16 }}>
+                      {ecos.map((eco) => {
+                        const data = fitByEco[eco];
+                        const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+                        const total = entries.reduce((s, [, v]) => s + v, 0) || 1;
+                        let cumAngle = -90;
+                        const slices = entries.map(([name, count]) => {
+                          const pctVal = count / total;
+                          const angle = Math.min(pctVal * 360, 359.9);
+                          const startRad = (cumAngle * Math.PI) / 180;
+                          const endRad = ((cumAngle + angle) * Math.PI) / 180;
+                          cumAngle += pctVal * 360;
+                          const large = angle > 180 ? 1 : 0;
+                          const r = 44, cx = 50, cy = 50;
+                          const x1 = cx + r * Math.cos(startRad), y1 = cy + r * Math.sin(startRad);
+                          const x2 = cx + r * Math.cos(endRad), y2 = cy + r * Math.sin(endRad);
+                          return { name, count, pctVal, path: `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z` };
+                        });
+                        return (
+                          <div key={eco} style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: ECO_COLORS[eco] || T.text, marginBottom: 8 }}>{eco}</div>
+                            <svg width={100} height={100} viewBox="0 0 100 100" style={{ display: "block", margin: "0 auto" }}>
+                              {slices.length > 0 ? slices.map((sl) => (
+                                <path key={sl.name} d={sl.path} fill={fitColors[sl.name] || T.textDim} opacity={0.85}>
+                                  <title>{sl.name}: {sl.count} ({Math.round(sl.pctVal * 100)}%)</title>
+                                </path>
+                              )) : <circle cx={50} cy={50} r={44} fill={T.border} />}
+                              <circle cx={50} cy={50} r={24} fill={T.bgCard} />
+                              <text x={50} y={53} textAnchor="middle" fontSize="14" fontWeight="900" fill={T.text}>{total}</text>
+                            </svg>
+                            <div style={{ marginTop: 6 }}>
+                              {entries.slice(0, 4).map(([name, count]) => (
+                                <div key={name} style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "center", marginBottom: 2 }}>
+                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: fitColors[name] || T.textDim, flexShrink: 0 }} />
+                                  <span style={{ fontSize: 10, color: T.textMuted }}>{name}</span>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: T.text }}>{count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+                      {[...allFitTypes].map((f) => (
+                        <span key={f} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: T.textMuted }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: fitColors[f] }} />{f}
+                        </span>
+                      ))}
+                    </div>
+                  </Section>
+                  <div style={{ height: 16 }} />
+                </>);
+              })()}
 
               {/* Service Mix by Ecosystem — D&E Projects */}
               {smm.ecosystems.length > 0 && smm.requestTypes.length > 0 && (
