@@ -1,10 +1,10 @@
 /**
- * Monthly cron — snapshots penetration and revenue data
- * Runs on the 1st of each month via Vercel Cron
- * Logs the PREVIOUS month's penetration values
+ * Weekly cron — snapshots penetration and revenue data
+ * Runs every Monday via Vercel Cron
+ * Logs the current "So Far This Month" penetration values
  */
 
-const { appendDeptHistory } = require("../../../../lib/dept-history");
+import { appendDeptHistory } from "../../../../lib/dept-history";
 
 export const dynamic = "force-dynamic";
 
@@ -45,25 +45,23 @@ function calculateFromSheet(raw) {
   if (!disciplineColId || !incurredColId) return null;
 
   let totalIncurred = 0, expIncurred = 0, delIncurred = 0;
-  let totalForecast = 0, expForecast = 0, delForecast = 0;
+  let expForecast = 0, delForecast = 0;
 
   for (const row of raw.rows) {
     let discipline = null, incurred = 0, forecast = 0;
     for (const cell of row.cells || []) {
-      if (cell.columnId === disciplineColId) discipline = String(cell.value || "").toUpperCase().trim();
+      if (cell.columnId === disciplineColId) discipline = String(cell.value || cell.displayValue || "").toUpperCase().trim();
       if (cell.columnId === incurredColId) incurred = parseCurrency(cell.value != null ? cell.value : cell.displayValue);
       if (forecastColId && cell.columnId === forecastColId) forecast = parseCurrency(cell.value != null ? cell.value : cell.displayValue);
     }
     totalIncurred += incurred;
-    totalForecast += forecast;
     if (discipline && EXP_DISCIPLINES.includes(discipline)) { expIncurred += incurred; expForecast += forecast; }
     if (discipline && DEL_DISCIPLINES.includes(discipline)) { delIncurred += incurred; delForecast += forecast; }
   }
 
-  const total = totalIncurred + totalForecast;
   return {
-    experiences_pct: total > 0 ? Math.round(((expIncurred + expForecast) / total) * 100) : 0,
-    delivery_pct: total > 0 ? Math.round(((delIncurred + delForecast) / total) * 100) : 0,
+    experiences_pct: totalIncurred > 0 ? Math.round((expIncurred / totalIncurred) * 100) : 0,
+    delivery_pct: totalIncurred > 0 ? Math.round((delIncurred / totalIncurred) * 100) : 0,
     exp_revenue: expIncurred + expForecast,
     del_revenue: delIncurred + delForecast,
   };
@@ -77,34 +75,25 @@ export async function GET(request) {
   }
 
   try {
-    const LAST_MONTH_SHEET = process.env.DEPT_PENETRATION_LAST_ID || "1413449557954436";
     const THIS_MONTH_SHEET = process.env.DEPT_PENETRATION_THIS_ID || "4701999716061060";
-
-    const [lastRaw, thisRaw] = await Promise.all([
-      apiRequest(`/sheets/${LAST_MONTH_SHEET}?pageSize=10000`).catch(() => null),
-      apiRequest(`/sheets/${THIS_MONTH_SHEET}?pageSize=10000`).catch(() => null),
-    ]);
-
-    // Use last month data for penetration snapshot
-    const lastCalc = calculateFromSheet(lastRaw);
+    const thisRaw = await apiRequest(`/sheets/${THIS_MONTH_SHEET}?pageSize=10000`).catch(() => null);
     const thisCalc = calculateFromSheet(thisRaw);
 
-    // Determine the month label: this cron runs on 1st, so last month = previous month
-    const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const monthLabel = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
-
-    if (!lastCalc) {
-      return Response.json({ error: "Could not calculate penetration from Last Month sheet" }, { status: 500 });
+    if (!thisCalc) {
+      return Response.json({ error: "Could not calculate penetration from This Month sheet" }, { status: 500 });
     }
 
+    // Weekly data point keyed by date (YYYY-MM-DD)
+    const now = new Date();
+    const dateLabel = now.toISOString().split("T")[0];
+
     const entry = {
-      month: monthLabel,
-      experiences: lastCalc.experiences_pct,
-      delivery: lastCalc.delivery_pct,
-      combined: lastCalc.experiences_pct + lastCalc.delivery_pct,
-      exp_revenue: thisCalc ? thisCalc.exp_revenue : 0,
-      del_revenue: thisCalc ? thisCalc.del_revenue : 0,
+      month: dateLabel,
+      experiences: thisCalc.experiences_pct,
+      delivery: thisCalc.delivery_pct,
+      combined: thisCalc.experiences_pct + thisCalc.delivery_pct,
+      exp_revenue: thisCalc.exp_revenue,
+      del_revenue: thisCalc.del_revenue,
     };
 
     const history = await appendDeptHistory(entry);

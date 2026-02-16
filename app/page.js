@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.7";
+const APP_VERSION = "1.10.9";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -24,6 +24,18 @@ const GLOBAL_CSS = `
     .chart-row { grid-template-columns: 1fr !important; }
     .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .exec-kpi-strip { grid-template-columns: repeat(2, 1fr) !important; }
+    .tab-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab-nav::-webkit-scrollbar { display: none; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { min-width: 700px; }
+    .mobile-container { padding: 12px 12px 32px !important; }
+    .mobile-header-title { font-size: 22px !important; }
+    .mobile-hide { display: none !important; }
+    .pen-cards { flex-direction: column !important; }
+    .pen-cards > div { width: 100% !important; }
+    .util-role-row { flex-wrap: wrap !important; }
+    .util-role-row > div:first-child { width: 100% !important; }
+    .util-role-bars { flex-direction: column !important; gap: 4px !important; }
   }
   @media (min-width: 769px) and (max-width: 1100px) {
     .exec-kpi-strip { grid-template-columns: repeat(3, 1fr) !important; }
@@ -75,12 +87,12 @@ function Badge({ color, label }) {
 
 function Tabs({ tabs, active, onChange }) {
   return (
-    <div style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: `2px solid ${T.border}` }}>
+    <div className="tab-nav" style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: `2px solid ${T.border}` }}>
       {tabs.map((t) => (
         <button key={t.key} onClick={() => onChange(t.key)} style={{
           padding: "12px 22px", border: "none", background: active === t.key ? T.bgCard : "transparent", cursor: "pointer",
           fontSize: 13, fontWeight: active === t.key ? 700 : 500, letterSpacing: 0.2,
-          color: active === t.key ? T.text : T.textMuted,
+          color: active === t.key ? T.text : T.textMuted, whiteSpace: "nowrap", flexShrink: 0,
           borderBottom: active === t.key ? `2px solid ${T.text}` : "2px solid transparent",
           borderRadius: active === t.key ? "8px 8px 0 0" : 0, marginBottom: -2,
         }}>{t.label}{t.count != null ? ` (${t.count})` : ""}</button>
@@ -660,10 +672,10 @@ export default function Dashboard() {
 
   return (<>
     <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
-    <div style={s.container}>
+    <div className="mobile-container" style={s.container}>
       <div style={s.header}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 4, color: T.textMuted, textTransform: "uppercase", marginBottom: 4 }}><img src="https://ktuyiikwhspwmzvyczit.supabase.co/storage/v1/object/public/assets/brand/antenna-new-logo.svg" alt="Antenna Group" style={{ height: 28, marginBottom: 4 }} /></div>
-        <h1 style={s.title}>{d?.title || "Antenna Group — All Projects Dashboard"}</h1>
+        <h1 className="mobile-header-title" style={s.title}>{d?.title || "Antenna Group — All Projects Dashboard"}</h1>
         <div style={s.subtitle}>
           <span>{d ? `${d.total_projects} active projects` : ""}</span>
           <span style={{ fontSize: 10, color: T.textDim, background: T.bgHover, padding: "2px 8px", borderRadius: 4, fontFamily: "monospace" }}>v{APP_VERSION}</span>
@@ -1226,7 +1238,7 @@ export default function Dashboard() {
                   <path d={mkLine("experiences")} fill="none" stroke={T.purple} strokeWidth={2} strokeLinejoin="round" />
                   <path d={mkLine("delivery")} fill="none" stroke={T.blue} strokeWidth={2} strokeLinejoin="round" />
                   {penTrend.map((m, i) => (
-                    <text key={i} x={xS(i)} y={ptH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{m.month.replace(/^\d{4}-/, "")}</text>
+                    <text key={i} x={xS(i)} y={ptH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{(() => { const p = m.month.split("-"); if (p.length === 3) { const mn = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1],10)-1]; return `${mn} ${parseInt(p[2],10)}`; } return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1],10)-1] || p[1]; })()}</text>
                   ))}
                   {[
                     { key: "combined", color: T.pink, label: `${last.combined || 0}%` },
@@ -1357,7 +1369,7 @@ export default function Dashboard() {
               )}
 
               {/* Penetration Trend */}
-              <Section title="Penetration Trend" subtitle={`D&E share of total incurred revenue · ${penTrend.length} data points · Baseline: Dec 2025 (Exp 10%, Del 6%)`}>
+              <Section title="Penetration Trend" subtitle={`D&E share of total incurred revenue · ${penTrend.length} data points (weekly) · Baseline: Dec 2025 (Exp 10%, Del 6%)`}>
                 {penetrationTrendChart || <div style={{ color: T.textDim, fontSize: 12, padding: 20 }}>Insufficient data for chart (need ≥2 months). Penetration history will accumulate automatically.</div>}
               </Section>
               <div style={{ height: 16 }} />
@@ -1485,10 +1497,9 @@ export default function Dashboard() {
                     {us.by_role.map((r) => {
                       const clientable = Math.max(0, r.avg_utilization - r.avg_billable - r.avg_admin);
                       return (
-                      <div key={r.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-                        <div style={{ width: 140, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{r.role}</div>
-                        <div style={{ width: 30, fontSize: 11, color: T.textDim, textAlign: "center", flexShrink: 0 }}>{r.count}</div>
-                        <div style={{ flex: 1, display: "flex", gap: 6, alignItems: "center" }}>
+                      <div key={r.role} className="util-role-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                        <div style={{ width: 140, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{r.role} <span style={{ fontSize: 10, color: T.textDim }}>({r.count})</span></div>
+                        <div className="util-role-bars" style={{ flex: 1, display: "flex", gap: 6, alignItems: "center" }}>
                           <div style={{ flex: 3, display: "flex", alignItems: "center", gap: 4 }}>
                             <span style={{ fontSize: 10, color: T.textDim, width: 40, flexShrink: 0 }}>Billable</span>
                             <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>

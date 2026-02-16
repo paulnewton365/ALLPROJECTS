@@ -3,6 +3,12 @@ export const metadata = {
   description: "Weekly project status, financials, and workload from Smartsheet",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({ children }) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://allprojects-kappa.vercel.app";
   return (
