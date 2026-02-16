@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.0";
+const APP_VERSION = "1.11.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1008,6 +1008,7 @@ export default function Dashboard() {
                         <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
                           {supportReds.length} red project{supportReds.length !== 1 ? "s" : ""} outside core ecosystems — {supportReds.filter((p) => p.category === "Active Support").length} Support, {supportReds.filter((p) => p.category === "Active Web Warranty").length} Web Warranty
                         </div>
+                        <div style={{ fontSize: 10, color: T.textDim, marginTop: 3, fontStyle: "italic" }}>These projects went red before entering support & warranty</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 20, fontWeight: 900, color: T.red }}>{fmtK(supportReds.reduce((sum, p) => sum + (p.overage || 0), 0))}</div>
