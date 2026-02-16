@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.4";
+const APP_VERSION = "1.11.5";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1189,6 +1189,8 @@ export default function Dashboard() {
             const effort = deptData.revenue_sections?.["TOTAL EFFORT"] || [];
             const deviation = deptData.revenue_sections?.["DEVIATION"] || [];
             const util = deptData.utilization || [];
+            const UTIL_TARGETS = { "Kirk Dammeier": 70, "Heather Corrie": 50, "JJ Zakheim": 75, "Monica Watson": 75, "Sarah Clark": 75, "Bobbie Maciuch": 75, "Hannah Deaton": 75, "Andrew McNamara": 75, "Arrabelle Stavroff": 75, "Chad Krulicki": 60, "Sarah Miller": 80, "Rebecca Zak": 40, "Richard Pisarski": 80 };
+            util.forEach((t) => { if (!t.utilization_target && UTIL_TARGETS[t.name]) t.utilization_target = UTIL_TARGETS[t.name]; });
             const integ = deptData.integrated_projects || [];
             const is_ = deptData.integrated_summary || {};
             const pen = deptData.penetration || {};

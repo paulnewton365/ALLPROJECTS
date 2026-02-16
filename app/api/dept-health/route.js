@@ -115,7 +115,7 @@ function parseUtilization(rows, columns) {
       billable: parsePercent(item["Billable"]),
       admin_time: parsePercent(item["Admin Time"]),
       non_billable: Math.max(0, parsePercent(item["Utilization"]) - parsePercent(item["Billable"])),
-      utilization_target: parsePercent(item["Utilization Target"] || item["Target"] || item["Util Target"]),
+      utilization_target: parsePercent(item["Utilization Target"] || item["Target"] || item["Util Target"] || item["Utilization target"] || item["target"] || item["Target %"] || item["Util. Target"]),
     };
   }).filter(Boolean);
 }
@@ -250,6 +250,7 @@ export async function GET() {
 
     const revenueSections = parseRevenuePivot(revenueRaw.rows || [], revenueRaw.columns || []);
     const utilization = parseUtilization(utilizationRaw.rows || [], utilizationRaw.columns || []);
+    const utilization_columns = (utilizationRaw.columns || []).map((c) => c.title);
     const integrated = parseIntegrated(integratedRaw.rows || [], integratedRaw.columns || []);
     const thisMonthCalc = calculateFromTimesheet(penThisRaw);
     const lastMonthCalc = calculateFromTimesheet(penLastRaw);
@@ -366,6 +367,7 @@ export async function GET() {
       revenue_summary: revenueSummary,
       pivot_summary: pivotSummary,
       utilization,
+      utilization_columns,
       utilization_summary: utilizationSummary,
       integrated_projects: integrated,
       integrated_summary: integratedSummary,
