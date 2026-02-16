@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.12.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -793,7 +793,7 @@ export default function Dashboard() {
             <KPI label="Burn Rate" value={`${d.live.financials.burn_rate_pct}%`} color={burnColor(d.live.financials.burn_rate_pct)} />
             <KPI label="Forecast Overage" value={fmtK(d.live.financials.total_overage)} color={d.live.financials.total_overage > 0 ? T.red : T.green} />
             <KPI label="OOP" value={fmtK(d.live.financials.total_oop)} />
-            <KPI label="Overserviced" value={d.live.financials.overserviced_count} detail={fmtK(d.live.financials.overserviced_amount)} color={d.live.financials.overserviced_count > 0 ? T.red : T.green} />
+            <KPI label="Overserviced Projects" value={d.live.financials.overserviced_count} color={d.live.financials.overserviced_count > 0 ? T.red : T.green} />
             <KPI label="Investment" value={fmtK(d.live.financials.total_investment)} />
             <KPI label="Missing Time" value={fmtK(d.live.financials.missing_time_total)} color={d.live.financials.missing_time_total > 5000 ? T.yellow : T.green} />
           </div>
@@ -923,7 +923,7 @@ export default function Dashboard() {
               {/* KPI Strip */}
               <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
                 <div style={s.execKpi}><div style={s.execLabel}>Red Projects</div><div style={{ ...s.execValue, color: T.red }}>{reds.length}</div><div style={s.execSub}>of {d.live.count} live projects ({Math.round((reds.length / d.live.count) * 100)}%)</div></div>
-                <div style={s.execKpi}><div style={s.execLabel}>Total Overage</div><div style={{ ...s.execValue, color: T.red }}>{fmtK(totalOverage)}</div><div style={s.execSub}>forecast overservice</div></div>
+                <div style={s.execKpi}><div style={s.execLabel}>Total Overage</div><div style={{ ...s.execValue, color: T.red }}>{(() => { const n = Math.abs(totalOverage); const sign = totalOverage < 0 ? "-" : ""; return n >= 1000000 ? sign + "$" + (n / 1000000).toFixed(2) + "M" : fmtK(totalOverage); })()}</div><div style={s.execSub}>forecast overservice</div></div>
                 <div style={s.execKpi}><div style={s.execLabel}>Budget at Risk</div><div style={{ ...s.execValue, color: T.text }}>{fmtK(totalBudget)}</div><div style={s.execSub}>{fmtK(totalActuals)} spent to date</div></div>
                 <div style={s.execKpi}><div style={s.execLabel}>Avg Overage</div><div style={{ ...s.execValue, color: T.red }}>{fmtK(totalOverage / reds.length)}</div><div style={s.execSub}>per red project</div></div>
               </div>
@@ -1328,7 +1328,7 @@ export default function Dashboard() {
                   { label: "Avg Utilization", value: `${us.avg_utilization || 0}%`, color: utilColor(us.avg_utilization || 0), sub: "Last 30 days" },
                   { label: "Avg Billable", value: `${us.avg_billable || 0}%`, color: billableColor(us.avg_billable || 0), sub: `${us.low_billable || 0} below 30%` },
                   { label: "Avg Admin", value: `${us.avg_admin || 0}%`, color: T.textMuted, sub: "Of total time" },
-                  { label: "D&E Revenue (Actuals + Forecast)", value: fmtK(rs.this_month_total || 0), color: T.text, sub: `Exp: ${fmtK(rs.this_month_exp || 0)} · Del: ${fmtK(rs.this_month_del || 0)}` },
+                  { label: "D&E Revenue", value: fmtK(rs.this_month_total || 0), color: T.text, sub: "Actuals + Forecast" },
                   { label: "Net Overservice", value: fmtK(is_.total_overage || 0), color: (is_.total_overage || 0) > 0 ? T.red : T.green, sub: `${integ.filter(p => p.overage > 0).length} over · ${integ.filter(p => p.overage < 0).length} under · ${is_.total_projects || 0} total` },
                 ].map((kpi) => (
                   <div key={kpi.label} style={s.execKpi}>
