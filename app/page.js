@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.6";
+const APP_VERSION = "1.11.7";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1465,9 +1465,13 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {[...util].sort((a, b) => (b.billable || 0) - (a.billable || 0)).map((t, i) => {
-                        const bW = `${t.billable || 0}%`;
-                        const aW = `${t.admin_time || 0}%`;
-                        const nbW = `${Math.max(0, (t.utilization || 0) - (t.billable || 0) - (t.admin_time || 0))}%`;
+                        const utilPct = t.utilization || 0;
+                        const billPct = Math.min(t.billable || 0, utilPct);
+                        const adminCapped = Math.min(t.admin_time || 0, Math.max(0, utilPct - billPct));
+                        const clientablePct = Math.max(0, utilPct - billPct - adminCapped);
+                        const bW = `${billPct}%`;
+                        const aW = `${adminCapped}%`;
+                        const nbW = `${clientablePct}%`;
                         const tgt = t.utilization_target || 0;
                         const diff = (t.utilization || 0) - tgt;
                         const utilClr = !tgt ? utilColor(t.utilization || 0) : diff >= -2 ? T.green : diff >= -5 ? T.yellow : T.red;
