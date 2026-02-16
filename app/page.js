@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.7";
+const APP_VERSION = "1.11.8";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1466,12 +1466,12 @@ export default function Dashboard() {
                     <tbody>
                       {[...util].sort((a, b) => (b.billable || 0) - (a.billable || 0)).map((t, i) => {
                         const utilPct = t.utilization || 0;
-                        const billPct = Math.min(t.billable || 0, utilPct);
-                        const adminCapped = Math.min(t.admin_time || 0, Math.max(0, utilPct - billPct));
-                        const clientablePct = Math.max(0, utilPct - billPct - adminCapped);
+                        const billPct = t.billable || 0;
+                        const adminPct = t.admin_time || 0;
+                        const clientablePct = Math.max(0, utilPct - billPct);
                         const bW = `${billPct}%`;
-                        const aW = `${adminCapped}%`;
                         const nbW = `${clientablePct}%`;
+                        const aW = `${adminPct}%`;
                         const tgt = t.utilization_target || 0;
                         const diff = (t.utilization || 0) - tgt;
                         const utilClr = !tgt ? utilColor(t.utilization || 0) : diff >= -2 ? T.green : diff >= -5 ? T.yellow : T.red;
@@ -1486,8 +1486,8 @@ export default function Dashboard() {
                             <td style={s.td}>
                               <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden", flex: 1, background: T.bgHover, position: "relative" }}>
                                 <div style={{ width: bW, background: T.green }} title={`Billable: ${pct(t.billable)}`} />
+                                <div style={{ width: nbW, background: T.blue, opacity: 0.4 }} title={`Clientable: ${pct(clientablePct)}`} />
                                 <div style={{ width: aW, background: T.yellow, opacity: 0.6 }} title={`Admin: ${pct(t.admin_time)}`} />
-                                <div style={{ width: nbW, background: T.blue, opacity: 0.4 }} title="Clientable" />
                                 {tgt > 0 && <div style={{ position: "absolute", left: `${tgt}%`, top: 0, bottom: 0, width: 2, background: T.red, zIndex: 2 }} title={`Target: ${tgt}%`} />}
                               </div>
                             </td>
@@ -1498,8 +1498,8 @@ export default function Dashboard() {
                   </table>
                   <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 10, color: T.textDim }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.green, display: "inline-block" }} /> Billable</span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.yellow, opacity: 0.6, display: "inline-block" }} /> Admin</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.blue, opacity: 0.4, display: "inline-block" }} /> Clientable</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: T.yellow, opacity: 0.6, display: "inline-block" }} /> Admin</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 2, height: 10, background: T.red, display: "inline-block" }} /> Target</span>
                   </div>
                 </div>
