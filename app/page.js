@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.1";
+const APP_VERSION = "1.11.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1087,6 +1087,8 @@ export default function Dashboard() {
                 </div>; })}</div>
               <div style={{ marginTop: 14, padding: "10px 14px", background: T.bgHover, borderRadius: 8, border: `1px solid ${T.border}`, fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>
                 <strong style={{ color: T.text }}>Not Qualified</strong> means live new business opportunities that did not go through formal qualification before being activated as a proposal. Qualification is our way of assuring opportunities are viable before investing in them.
+                <br /><br />
+                <strong style={{ color: T.text }}>Decline</strong> represents a bid that we are actively working on despite the recommendation to decline the opportunity (from the qualifier).
               </div></>); })()}</Section>
             <Section title="Data Completeness" subtitle="Pipeline data quality">
               <DataCompleteness data={d.newbiz.data_completeness} />
