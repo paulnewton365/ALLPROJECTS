@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.10.9";
+const APP_VERSION = "1.11.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -706,7 +706,7 @@ export default function Dashboard() {
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Weighted Pipeline by Ecosystem" subtitle="Stacked by stage"><StackedPipeline data={nbEcoPipeline} displayNames={dn} ensureEcosystems={pipelineEcos} /></Section>
-            <Section title="Service Mix by Ecosystem" subtitle="Size = projects · Opacity = budget"><BubbleMatrix matrix={d.live.ecosystem_request_type} billable={billable} totalProjects={liveProjectsBillable.length} /></Section>
+            <Section title="Service Mix by Ecosystem" subtitle="Size = projects · Opacity = budget · Values represent total project value containing each service, not the revenue split"><BubbleMatrix matrix={d.live.ecosystem_request_type} billable={billable} totalProjects={liveProjectsBillable.length} /></Section>
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Top Priority Projects" subtitle="Ordered by budget">
