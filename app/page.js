@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.8";
+const APP_VERSION = "1.11.9";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1511,7 +1511,7 @@ export default function Dashboard() {
                 <>
                   <Section title="Utilization by Role" subtitle="Averaged across team members">
                     {us.by_role.map((r) => {
-                      const clientable = Math.max(0, r.avg_utilization - r.avg_billable - r.avg_admin);
+                      const clientable = Math.max(0, r.avg_utilization - r.avg_billable);
                       return (
                       <div key={r.role} className="util-role-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
                         <div style={{ width: 140, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{r.role} <span style={{ fontSize: 10, color: T.textDim }}>({r.count})</span></div>
@@ -1524,18 +1524,18 @@ export default function Dashboard() {
                             <span style={{ fontSize: 12, fontWeight: 700, color: billableColor(r.avg_billable), width: 36, textAlign: "right", flexShrink: 0 }}>{r.avg_billable}%</span>
                           </div>
                           <div style={{ flex: 2, display: "flex", alignItems: "center", gap: 4 }}>
-                            <span style={{ fontSize: 10, color: T.textDim, width: 40, flexShrink: 0 }}>Admin</span>
-                            <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
-                              <div style={{ width: `${r.avg_admin}%`, height: "100%", background: T.yellow, opacity: 0.7, borderRadius: 3 }} />
-                            </div>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, width: 36, textAlign: "right", flexShrink: 0 }}>{r.avg_admin}%</span>
-                          </div>
-                          <div style={{ flex: 2, display: "flex", alignItems: "center", gap: 4 }}>
                             <span style={{ fontSize: 10, color: T.textDim, width: 52, flexShrink: 0 }}>Clientable</span>
                             <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
                               <div style={{ width: `${clientable}%`, height: "100%", background: T.blue, opacity: 0.4, borderRadius: 3 }} />
                             </div>
                             <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, width: 36, textAlign: "right", flexShrink: 0 }}>{clientable}%</span>
+                          </div>
+                          <div style={{ flex: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: 10, color: T.textDim, width: 40, flexShrink: 0 }}>Admin</span>
+                            <div style={{ flex: 1, height: 14, background: T.bgHover, borderRadius: 3, overflow: "hidden" }}>
+                              <div style={{ width: `${r.avg_admin}%`, height: "100%", background: T.yellow, opacity: 0.7, borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, width: 36, textAlign: "right", flexShrink: 0 }}>{r.avg_admin}%</span>
                           </div>
                         </div>
                       </div>
