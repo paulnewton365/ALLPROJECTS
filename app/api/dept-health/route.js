@@ -115,6 +115,7 @@ function parseUtilization(rows, columns) {
       billable: parsePercent(item["Billable"]),
       admin_time: parsePercent(item["Admin Time"]),
       non_billable: Math.max(0, parsePercent(item["Utilization"]) - parsePercent(item["Billable"])),
+      utilization_target: parsePercent(item["Utilization Target"] || item["Target"] || item["Util Target"]),
     };
   }).filter(Boolean);
 }

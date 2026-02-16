@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.11.3";
+const APP_VERSION = "1.11.4";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1455,6 +1455,7 @@ export default function Dashboard() {
                         <th style={{ ...s.th, width: 160 }}>Team Member</th>
                         <th style={{ ...s.th, width: 140 }}>Role</th>
                         <th style={{ ...s.th, width: 80, textAlign: "center" }}>Utilization</th>
+                        <th style={{ ...s.th, width: 70, textAlign: "center" }}>Target</th>
                         <th style={{ ...s.th, width: 80, textAlign: "center" }}>Billable</th>
                         <th style={{ ...s.th, width: 80, textAlign: "center" }}>Admin</th>
                         <th style={{ ...s.th, flex: 1 }}>Breakdown</th>
@@ -1470,6 +1471,7 @@ export default function Dashboard() {
                             <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{t.name}</td>
                             <td style={{ ...s.td, fontSize: 11, color: T.textMuted }}>{t.role}</td>
                             <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: utilColor(t.utilization || 0) }}>{pct(t.utilization)}</td>
+                            <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: t.utilization_target ? ((t.utilization || 0) >= t.utilization_target ? T.green : T.red) : T.textDim }}>{t.utilization_target ? pct(t.utilization_target) : "—"}</td>
                             <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: billableColor(t.billable || 0) }}>{pct(t.billable)}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{pct(t.admin_time)}</td>
                             <td style={s.td}>
