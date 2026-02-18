@@ -5,6 +5,7 @@
  */
 
 import { appendDeptHistory } from "../../../../lib/dept-history";
+import { appendUtilHistory } from "../../../../lib/util-history";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,45 @@ function parseCurrency(val) {
   const s = String(val).replace(/[$,\s]/g, "");
   if (s.startsWith("(") && s.endsWith(")")) return -parseFloat(s.slice(1, -1)) || 0;
   return parseFloat(s) || 0;
+}
+
+function parsePercent(val) {
+  if (val == null || val === "") return 0;
+  const s = String(val).replace(/%/g, "").trim();
+  const n = parseFloat(s);
+  if (isNaN(n)) return 0;
+  return n > 0 && n < 1 ? Math.round(n * 1000) / 10 : Math.round(n);
+}
+
+function reportRowToObject(row, columns) {
+  const obj = {};
+  const cells = row.cells || [];
+  for (let i = 0; i < cells.length && i < columns.length; i++) {
+    obj[columns[i].title] = cells[i].displayValue != null ? cells[i].displayValue : cells[i].value;
+  }
+  return obj;
+}
+
+function parseUtilizationAverages(rows, columns) {
+  const people = [];
+  for (const row of rows) {
+    const item = reportRowToObject(row, columns);
+    const nameVal = String(item["Team Member"] || item["Primary"] || "").trim();
+    if (!nameVal) continue;
+    people.push({
+      utilization: parsePercent(item["Utilization"]),
+      billable: parsePercent(item["Billable"]),
+      admin_time: parsePercent(item["Admin Time"]),
+    });
+  }
+  if (!people.length) return null;
+  const avg = (arr, key) => Math.round(arr.reduce((s, p) => s + (p[key] || 0), 0) / arr.length);
+  return {
+    avg_utilization: avg(people, "utilization"),
+    avg_billable: avg(people, "billable"),
+    avg_admin: avg(people, "admin_time"),
+    team_size: people.length,
+  };
 }
 
 const EXP_DISCIPLINES = ["CREATIVE COPYWRITER", "CREATIVE STRATEGY", "DESIGN", "DIGITAL PRODUCER", "INTEGRATED STRATEGY", "STUDIO MANAGEMENT", "TECH DEV"];
@@ -76,7 +116,13 @@ export async function GET(request) {
 
   try {
     const THIS_MONTH_SHEET = process.env.DEPT_PENETRATION_THIS_ID || "4701999716061060";
-    const thisRaw = await apiRequest(`/sheets/${THIS_MONTH_SHEET}?pageSize=10000`).catch(() => null);
+    const UTILIZATION_REPORT = process.env.DEPT_UTILIZATION_REPORT_ID || "6562385201418116";
+
+    const [thisRaw, utilRaw] = await Promise.all([
+      apiRequest(`/sheets/${THIS_MONTH_SHEET}?pageSize=10000`).catch(() => null),
+      apiRequest(`/reports/${UTILIZATION_REPORT}?pageSize=100`).catch(() => null),
+    ]);
+
     const thisCalc = calculateFromSheet(thisRaw);
 
     if (!thisCalc) {
@@ -97,7 +143,18 @@ export async function GET(request) {
     };
 
     const history = await appendDeptHistory(entry);
-    return Response.json({ success: true, logged: entry, total_entries: history.length });
+
+    // Utilization snapshot
+    let utilEntry = null;
+    if (utilRaw) {
+      const utilCalc = parseUtilizationAverages(utilRaw.rows || [], utilRaw.columns || []);
+      if (utilCalc) {
+        utilEntry = { date: dateLabel, ...utilCalc };
+        await appendUtilHistory(utilEntry);
+      }
+    }
+
+    return Response.json({ success: true, logged: entry, util_logged: utilEntry, total_entries: history.length });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }

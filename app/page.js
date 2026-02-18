@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.12.1";
+const APP_VERSION = "1.12.2";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -632,22 +632,25 @@ export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [deptData, setDeptData] = useState(null);
   const [deptHistory, setDeptHistory] = useState([]);
+  const [utilHistory, setUtilHistory] = useState([]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
         fetch("/api/dept-health-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
+        fetch("/api/util-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
       const dept = await deptRes.json().catch(() => null);
       const deptHist = await deptHistRes.json().catch(() => ({ history: [] }));
+      const utilHist = await utilHistRes.json().catch(() => ({ history: [] }));
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -1544,6 +1547,71 @@ export default function Dashboard() {
                   <div style={{ height: 16 }} />
                 </>
               )}
+
+              {/* Utilization Trend */}
+              {(() => {
+                // Merge history with current live data as latest point
+                const today = new Date().toISOString().split("T")[0];
+                const livePoint = util.length > 0 ? {
+                  date: today,
+                  avg_utilization: Math.round(util.reduce((s, t) => s + (t.utilization || 0), 0) / util.length),
+                  avg_billable: Math.round(util.reduce((s, t) => s + (t.billable || 0), 0) / util.length),
+                  avg_admin: Math.round(util.reduce((s, t) => s + (t.admin_time || 0), 0) / util.length),
+                } : null;
+                const pts = [...(utilHistory || [])];
+                if (livePoint && !pts.find((p) => p.date === today)) pts.push(livePoint);
+                pts.sort((a, b) => a.date.localeCompare(b.date));
+                if (pts.length < 2) return null;
+
+                const utW = 760, utH = 220, utPadL = 40, utPadR = 20, utPadT = 16, utPadB = 30;
+                const utPlotW = utW - utPadL - utPadR, utPlotH = utH - utPadT - utPadB;
+                const maxPct = Math.max(...pts.map((p) => Math.max(p.avg_utilization || 0, p.avg_billable || 0, p.avg_admin || 0)), 50);
+                const ceil = Math.ceil(maxPct / 10) * 10;
+                const yU = (v) => utPadT + utPlotH - ((v / ceil) * utPlotH);
+                const xU = (i) => utPadL + (i / (pts.length - 1)) * utPlotW;
+                const mkLine = (key) => pts.map((p, i) => `${i === 0 ? "M" : "L"}${xU(i).toFixed(1)},${yU(p[key] || 0).toFixed(1)}`).join(" ");
+                const last = pts[pts.length - 1];
+                const lines = [
+                  { key: "avg_utilization", color: T.green, label: "Utilization" },
+                  { key: "avg_billable", color: T.blue, label: "Billable" },
+                  { key: "avg_admin", color: T.yellow, label: "Admin" },
+                ];
+
+                return (
+                  <Section title="Utilization Trend" subtitle={`Team averages · ${pts.length} data points (weekly) · Utilization = Billable + Clientable`}>
+                    <svg width="100%" viewBox={`0 0 ${utW} ${utH}`} style={{ display: "block" }}>
+                      {[0, Math.round(ceil / 4), Math.round(ceil / 2), Math.round((ceil * 3) / 4), ceil].map((v) => (
+                        <g key={v}>
+                          <line x1={utPadL} x2={utW - utPadR} y1={yU(v)} y2={yU(v)} stroke={T.border} strokeWidth={1} />
+                          <text x={utPadL - 6} y={yU(v) + 3} textAnchor="end" fontSize={9} fill={T.textDim}>{v}%</text>
+                        </g>
+                      ))}
+                      {lines.map(({ key, color }) => (
+                        <path key={key} d={mkLine(key)} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
+                      ))}
+                      {lines.map(({ key, color }) => (
+                        <g key={key + "-dot"}>
+                          <circle cx={xU(pts.length - 1)} cy={yU(last[key] || 0)} r={4} fill={color} />
+                        </g>
+                      ))}
+                      {pts.map((p, i) => {
+                        const parts = p.date.split("-");
+                        const lbl = parts.length === 3 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1],10)-1] + " " + parseInt(parts[2],10) : p.date;
+                        return <text key={i} x={xU(i)} y={utH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{lbl}</text>;
+                      })}
+                    </svg>
+                    <div style={{ display: "flex", gap: 20, justifyContent: "center", marginTop: 8 }}>
+                      {lines.map(({ key, color, label }) => (
+                        <span key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.textMuted }}>
+                          <span style={{ width: 14, height: 3, borderRadius: 2, background: color, display: "inline-block" }} />
+                          {label}: <strong style={{ color: T.text }}>{last[key] || 0}%</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </Section>
+                );
+              })()}
+              <div style={{ height: 16 }} />
 
               {/* Integrated RAG + Weekly Deviation */}
               <div className="chart-row" style={{ ...s.chartRow, marginBottom: 16 }}>
