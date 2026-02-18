@@ -52,9 +52,14 @@ function parseUtilizationAverages(rows, columns) {
   const people = [];
   for (const row of rows) {
     const item = reportRowToObject(row, columns);
-    const nameVal = String(item["Team Member"] || item["Primary"] || "").trim();
-    if (!nameVal) continue;
+    const primaryVal = String(item["Primary"] || "").trim();
+    let name = String(item["Team Member"] || primaryVal || "").trim();
+    if (!name) continue;
+    if (primaryVal.includes(" - ")) {
+      name = primaryVal.split(" - ").slice(1).join(" - ").trim();
+    }
     people.push({
+      name,
       utilization: parsePercent(item["Utilization"]),
       billable: parsePercent(item["Billable"]),
       admin_time: parsePercent(item["Admin Time"]),
@@ -62,11 +67,14 @@ function parseUtilizationAverages(rows, columns) {
   }
   if (!people.length) return null;
   const avg = (arr, key) => Math.round(arr.reduce((s, p) => s + (p[key] || 0), 0) / arr.length);
+  const team = {};
+  people.forEach((p) => { team[p.name] = { utilization: p.utilization, billable: p.billable }; });
   return {
     avg_utilization: avg(people, "utilization"),
     avg_billable: avg(people, "billable"),
     avg_admin: avg(people, "admin_time"),
     team_size: people.length,
+    team,
   };
 }
 

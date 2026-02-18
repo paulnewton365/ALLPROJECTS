@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.12.2";
+const APP_VERSION = "1.12.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1194,6 +1194,18 @@ export default function Dashboard() {
             const util = deptData.utilization || [];
             const UTIL_TARGETS = { "Kirk Dammeier": 70, "Heather Corrie": 50, "JJ Zakheim": 75, "Monica Watson": 75, "Sarah Clark": 75, "Bobbie Maciuch": 75, "Hannah Deaton": 75, "Andrew McNamara": 75, "Arrabelle Stavroff": 75, "Chad Krulicki": 60, "Sarah Miller": 80, "Rebecca Zak": 40, "Richard Pisarski": 80 };
             util.forEach((t) => { if (!t.utilization_target && UTIL_TARGETS[t.name]) t.utilization_target = UTIL_TARGETS[t.name]; });
+            // Find the most recent stored snapshot for per-person trends
+            const prevSnap = (() => {
+              const sorted = [...(utilHistory || [])].sort((a, b) => b.date.localeCompare(a.date));
+              return sorted.find((s) => s.team) || null;
+            })();
+            util.forEach((t) => {
+              if (prevSnap?.team?.[t.name]) {
+                const prev = prevSnap.team[t.name];
+                t.util_delta = (t.utilization || 0) - (prev.utilization || 0);
+                t.bill_delta = (t.billable || 0) - (prev.billable || 0);
+              }
+            });
             const integ = deptData.integrated_projects || [];
             const is_ = deptData.integrated_summary || {};
             const pen = deptData.penetration || {};
@@ -1452,7 +1464,7 @@ export default function Dashboard() {
               })()}
 
               {/* Utilization Heatmap */}
-              <Section title="Team Utilization — Last 30 Days" subtitle={`${util.length} team members · Ordered by billable %`}>
+              <Section title="Team Utilization — Last 30 Days" subtitle={`${util.length} team members · Ordered by billable %${prevSnap ? ` · Arrows vs ${prevSnap.date}` : ""}`}>
                 <div style={{ overflowX: "auto" }}>
                   <table style={s.table}>
                     <thead>
@@ -1482,9 +1494,9 @@ export default function Dashboard() {
                           <tr key={i} style={{ background: i % 2 === 0 ? T.bgCard : T.bgCardAlt }}>
                             <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{t.name}</td>
                             <td style={{ ...s.td, fontSize: 11, color: T.textMuted }}>{t.role}</td>
-                            <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: utilClr }}>{pct(t.utilization)}</td>
+                            <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: utilClr }}>{pct(t.utilization)}{t.util_delta != null && t.util_delta !== 0 && <span style={{ fontSize: 9, marginLeft: 2, color: t.util_delta > 0 ? T.green : T.red }}>{t.util_delta > 0 ? "▲" : "▼"}</span>}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{t.utilization_target ? pct(t.utilization_target) : "—"}</td>
-                            <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: billableColor(t.billable || 0) }}>{pct(t.billable)}</td>
+                            <td style={{ ...s.td, textAlign: "center", fontWeight: 700, fontSize: 13, color: billableColor(t.billable || 0) }}>{pct(t.billable)}{t.bill_delta != null && t.bill_delta !== 0 && <span style={{ fontSize: 9, marginLeft: 2, color: t.bill_delta > 0 ? T.green : T.red }}>{t.bill_delta > 0 ? "▲" : "▼"}</span>}</td>
                             <td style={{ ...s.td, textAlign: "center", fontSize: 12, color: T.textMuted }}>{pct(t.admin_time)}</td>
                             <td style={s.td}>
                               <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden", flex: 1, background: T.bgHover, position: "relative" }}>
