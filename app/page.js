@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.13.0";
+const APP_VERSION = "1.13.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1081,7 +1081,7 @@ export default function Dashboard() {
           const fmtDev = (v) => { const abs = Math.abs(v); const str = abs >= 1000 ? "$" + (abs / 1000).toFixed(1) + "K" : "$" + Math.round(abs); return v < 0 ? "-" + str : "+" + str; };
           const devColor = (v) => v > 500 ? T.red : v < -500 ? T.blue : T.green;
 
-          // Build trend data: history + current live point
+          // Build trend data: baseline + history + current live point
           const today = new Date().toISOString().split("T")[0];
           const livePoint = {
             date: today,
@@ -1091,7 +1091,11 @@ export default function Dashboard() {
             total_ed: dev.total_ed || 0,
             total_perf: dev.total_perf || 0,
           };
+          // Baseline = same values as today, dated 7 days ago
+          const baseDate = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+          const baselinePoint = { ...livePoint, date: baseDate };
           const trendPts = [...(deviationHistory || [])];
+          if (!trendPts.find((p) => p.date === baseDate) && trendPts.length === 0) trendPts.push(baselinePoint);
           if (!trendPts.find((p) => p.date === today)) trendPts.push(livePoint);
           trendPts.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -1106,8 +1110,9 @@ export default function Dashboard() {
             </div>
 
             {/* Deviation context */}
-            <div style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 16px", marginBottom: 16, fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>
+            <div style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 10, padding: "14px 20px", marginBottom: 16, fontSize: 13, color: T.textMuted, lineHeight: 1.7, textAlign: "center" }}>
               <strong style={{ color: T.text }}>What is deviation?</strong> The difference between booked (scheduled) hours and actual hours logged on timesheets over the last 30 days, expressed in dollars. <span style={{ color: T.red }}>Positive = team logged more time than booked</span> · <span style={{ color: T.blue }}>Negative = logged less than booked</span> · <span style={{ color: T.green }}>Near zero = on track</span>
+              <br/><em style={{ color: T.text }}>Deviation is a predictor of OS and managing it now will protect OS further down the line.</em>
             </div>
 
             {/* Deviation Trend */}
@@ -1164,8 +1169,8 @@ export default function Dashboard() {
                 })()}
               </Section>
             ) : (
-              <Section title="Deviation Trend" subtitle="Weekly snapshots will appear after the first cron run">
-                <div style={{ textAlign: "center", padding: 30, color: T.textMuted, fontSize: 13 }}>Trend data will populate weekly. Current snapshot shown in KPIs above.</div>
+              <Section title="Deviation Trend" subtitle="Weekly snapshots will be added in order to track trend">
+                <div style={{ textAlign: "center", padding: 30, color: T.textMuted, fontSize: 13 }}>Weekly snapshots will be added in order to track trend.</div>
               </Section>
             )}
             <div style={{ height: 16 }} />
@@ -1179,8 +1184,8 @@ export default function Dashboard() {
                   { key: "project", label: "Project", w: 180, style: { fontSize: 11 } },
                   { key: "ecosystem", label: "Ecosystem", w: 90, style: { fontSize: 11, color: T.textMuted } },
                   { key: "rag", label: "RAG", w: 50, render: (v) => <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: RAG[v]?.text || T.textDim }} /> },
-                  { key: "deviation", label: "Total Dev", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: v > 500 ? T.red : v < -500 ? T.blue : T.green }}>{fmtDev(v)}</span> },
-                  { key: "deviation_eco", label: "Eco", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                  { key: "deviation", label: "Deviation", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: v > 500 ? T.red : v < -500 ? T.blue : T.green }}>{fmtDev(v)}</span> },
+                  { key: "deviation_eco", label: "Acct", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
                   { key: "deviation_ed", label: "E&D", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
                   { key: "deviation_perf", label: "Perf", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
                 ]} />
@@ -1196,25 +1201,25 @@ export default function Dashboard() {
                         const pct = (Math.abs(v.total) / maxBar) * 100;
                         const isPositive = v.total > 0;
                         return (
-                          <div key={eco} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "4px 0" }}>
-                            <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco] || T.text }}>{eco}</div>
-                            <div style={{ flex: 1, height: 24, background: T.bgHover, borderRadius: 6, overflow: "hidden", position: "relative" }}>
+                          <div key={eco} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, padding: "4px 0" }}>
+                            <div style={{ width: 120, fontSize: 14, fontWeight: 700, color: ECO_COLORS[eco] || T.text }}>{eco}</div>
+                            <div style={{ flex: 1, height: 36, background: T.bgHover, borderRadius: 8, overflow: "hidden", position: "relative" }}>
                               <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: T.border }} />
                               <div style={{
                                 position: "absolute",
                                 [isPositive ? "left" : "right"]: "50%",
-                                top: 2, bottom: 2,
+                                top: 3, bottom: 3,
                                 width: `${pct / 2}%`,
                                 background: isPositive ? T.red : T.blue,
-                                borderRadius: 4,
-                                opacity: 0.75,
+                                borderRadius: 5,
+                                opacity: 0.8,
                               }} />
                             </div>
-                            <div style={{ width: 80, textAlign: "right", fontSize: 12, fontWeight: 700, fontFamily: "monospace", color: v.total > 500 ? T.red : v.total < -500 ? T.blue : T.green }}>{fmtDev(v.total)}</div>
+                            <div style={{ width: 90, textAlign: "right", fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: v.total > 500 ? T.red : v.total < -500 ? T.blue : T.green }}>{fmtDev(v.total)}</div>
                           </div>
                         );
                       })}
-                      <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 10, fontSize: 10, color: T.textDim }}>
+                      <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 12, fontSize: 11, color: T.textDim }}>
                         <span>← Underworked (logged less than booked)</span>
                         <span style={{ color: T.border }}>|</span>
                         <span>Overworked (logged more than booked) →</span>
@@ -1248,33 +1253,44 @@ export default function Dashboard() {
             <div style={{ height: 16 }} />
 
             {/* Deviation Distribution */}
-            <Section title="Team Deviation Breakdown" subtitle="Ecosystem vs Experiences & Delivery vs Performance contribution per ecosystem">
+            <Section title="Team Deviation Breakdown" subtitle="Account/PR vs Experiences & Delivery vs Performance contribution per ecosystem">
               {(() => {
+                const TEAM_COLORS = { "Account/PR": "#3b73c4", "E&D": "#7c5cbf", "Performance": "#c49a1a" };
                 const ecoKeys = ecoEntries.map(([k]) => k);
+                const maxAbs = Math.max(...ecoKeys.map((eco) => {
+                  const v = byEco[eco];
+                  return Math.abs(v.eco || 0) + Math.abs(v.ed || 0) + Math.abs(v.perf || 0);
+                }), 1);
                 return (
                   <div>
                     {ecoKeys.map((eco) => {
                       const v = byEco[eco];
                       const parts = [
-                        { label: "Ecosystem", value: v.eco || 0, color: ECO_COLORS[eco] || T.textDim },
-                        { label: "E&D", value: v.ed || 0, color: "#7c5cbf" },
-                        { label: "Performance", value: v.perf || 0, color: "#c49a1a" },
+                        { label: "Account/PR", value: v.eco || 0, color: TEAM_COLORS["Account/PR"] },
+                        { label: "E&D", value: v.ed || 0, color: TEAM_COLORS["E&D"] },
+                        { label: "Performance", value: v.perf || 0, color: TEAM_COLORS["Performance"] },
                       ];
-                      const totalAbs = parts.reduce((s, p) => s + Math.abs(p.value), 0) || 1;
+                      const totalAbs = parts.reduce((s, p) => s + Math.abs(p.value), 0);
+                      const barWidth = maxAbs > 0 ? (totalAbs / maxAbs) * 100 : 0;
                       return (
-                        <div key={eco} style={{ marginBottom: 12 }}>
+                        <div key={eco} style={{ marginBottom: 14 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                            <span style={{ width: 110, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco] || T.text }}>{eco}</span>
-                            <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 700, color: devColor(v.total || 0) }}>{fmtDev(v.total || 0)}</span>
+                            <span style={{ width: 110, fontSize: 13, fontWeight: 700, color: ECO_COLORS[eco] || T.text }}>{eco}</span>
+                            <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: devColor(v.total || 0) }}>{fmtDev(v.total || 0)}</span>
                           </div>
-                          <div style={{ display: "flex", gap: 2, height: 20, borderRadius: 6, overflow: "hidden", background: T.bgHover }}>
-                            {parts.filter((p) => p.value !== 0).map((p) => (
-                              <div key={p.label} style={{ width: `${(Math.abs(p.value) / totalAbs) * 100}%`, background: p.color, opacity: p.value > 0 ? 0.85 : 0.4, position: "relative", minWidth: 4 }}>
-                                <span style={{ position: "absolute", top: 2, left: 4, fontSize: 9, color: "#fff", fontWeight: 700 }}>{Math.abs(p.value) / totalAbs > 0.15 ? p.label : ""}</span>
-                              </div>
-                            ))}
+                          <div style={{ width: "100%", height: 22, background: T.bgHover, borderRadius: 6, overflow: "hidden" }}>
+                            <div style={{ display: "flex", gap: 2, height: "100%", width: `${barWidth}%` }}>
+                              {parts.filter((p) => p.value !== 0).map((p) => {
+                                const segPct = totalAbs > 0 ? (Math.abs(p.value) / totalAbs) * 100 : 0;
+                                return (
+                                  <div key={p.label} style={{ width: `${segPct}%`, background: p.color, opacity: p.value > 0 ? 0.85 : 0.4, position: "relative", minWidth: 4, borderRadius: 3 }}>
+                                    <span style={{ position: "absolute", top: 3, left: 4, fontSize: 9, color: "#fff", fontWeight: 700 }}>{segPct > 20 ? p.label : ""}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div style={{ display: "flex", gap: 12, marginTop: 2, fontSize: 10, color: T.textDim }}>
+                          <div style={{ display: "flex", gap: 14, marginTop: 3, fontSize: 10, color: T.textDim }}>
                             {parts.map((p) => (
                               <span key={p.label}><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: p.color, marginRight: 3 }} />{p.label}: <span style={{ color: p.value > 0 ? T.red : p.value < 0 ? T.blue : T.textDim, fontWeight: 600 }}>{fmtDev(p.value)}</span></span>
                             ))}
@@ -1282,6 +1298,13 @@ export default function Dashboard() {
                         </div>
                       );
                     })}
+                    <div style={{ display: "flex", gap: 20, justifyContent: "center", marginTop: 10, fontSize: 11, color: T.textDim }}>
+                      {Object.entries(TEAM_COLORS).map(([label, color]) => (
+                        <span key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ width: 10, height: 10, borderRadius: "50%", background: color }} />{label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 );
               })()}
