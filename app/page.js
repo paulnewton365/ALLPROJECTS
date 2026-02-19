@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.13.2";
+const APP_VERSION = "1.13.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -634,17 +634,19 @@ export default function Dashboard() {
   const [deptHistory, setDeptHistory] = useState([]);
   const [utilHistory, setUtilHistory] = useState([]);
   const [deviationHistory, setDeviationHistory] = useState([]);
+  const [pipelineHistory, setPipelineHistory] = useState([]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
         fetch("/api/dept-health-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/util-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/deviation-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
+        fetch("/api/pipeline-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
@@ -652,8 +654,9 @@ export default function Dashboard() {
       const deptHist = await deptHistRes.json().catch(() => ({ history: [] }));
       const utilHist = await utilHistRes.json().catch(() => ({ history: [] }));
       const devHist = await devHistRes.json().catch(() => ({ history: [] }));
+      const pipeHist = await pipeHistRes.json().catch(() => ({ history: [] }));
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -1324,6 +1327,77 @@ export default function Dashboard() {
             <Section title="Pipeline by Stage"><PipelineFunnel funnel={d.newbiz.pipeline_funnel} displayNames={dn} /></Section>
             <Section title="Weighted Pipeline by Ecosystem" subtitle="Climate · Health · Real Estate · Public Affairs"><StackedPipeline data={nbEcoPipeline} displayNames={dn} ensureEcosystems={pipelineEcos} /></Section>
           </div>
+
+          {/* Pipeline Trend */}
+          {(() => {
+            const nbEcos = d.newbiz.by_ecosystem || [];
+            const findEco = (name) => nbEcos.find((e) => e.name === name)?.weighted || 0;
+            const today = new Date().toISOString().split("T")[0];
+            const livePoint = {
+              date: today,
+              weighted_total: d.newbiz.weighted_pipeline || 0,
+              climate: Math.round(findEco("Climate")),
+              real_estate: Math.round(findEco("Real Estate")),
+              health: Math.round(findEco("Health")),
+            };
+            const baseDate = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+            const baselinePoint = { ...livePoint, date: baseDate };
+            const pts = [...(pipelineHistory || [])];
+            if (!pts.find((p) => p.date === baseDate) && pts.length === 0) pts.push(baselinePoint);
+            if (!pts.find((p) => p.date === today)) pts.push(livePoint);
+            pts.sort((a, b) => a.date.localeCompare(b.date));
+            if (pts.length < 2) return null;
+
+            const pW = 760, pH = 220, pPadL = 55, pPadR = 20, pPadT = 16, pPadB = 30;
+            const pPlotW = pW - pPadL - pPadR, pPlotH = pH - pPadT - pPadB;
+            const lines = [
+              { key: "weighted_total", color: T.orange, label: "Total Weighted" },
+              { key: "climate", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
+              { key: "real_estate", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
+              { key: "health", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
+            ];
+            const allVals = pts.flatMap((p) => lines.map((l) => p[l.key] || 0));
+            const maxVal = Math.max(...allVals, 1);
+            const ceil = Math.ceil(maxVal / 50000) * 50000 || 50000;
+            const yP = (v) => pPadT + pPlotH - ((v / ceil) * pPlotH);
+            const xP = (i) => pPadL + (i / (pts.length - 1)) * pPlotW;
+            const mkLine = (key) => pts.map((p, i) => `${i === 0 ? "M" : "L"}${xP(i).toFixed(1)},${yP(p[key] || 0).toFixed(1)}`).join(" ");
+            const last = pts[pts.length - 1];
+            const gridVals = [0, Math.round(ceil / 4), Math.round(ceil / 2), Math.round(ceil * 3 / 4), ceil];
+
+            return (<>
+              <Section title="Pipeline Trend" subtitle="Weekly weighted pipeline snapshots · Total + Climate · Real Estate · Health">
+                <svg width="100%" viewBox={`0 0 ${pW} ${pH}`} style={{ display: "block" }}>
+                  {gridVals.map((v) => (
+                    <g key={v}>
+                      <line x1={pPadL} x2={pW - pPadR} y1={yP(v)} y2={yP(v)} stroke={T.border} strokeWidth={1} />
+                      <text x={pPadL - 6} y={yP(v) + 3} textAnchor="end" fontSize={9} fill={T.textDim}>{fmtK(v)}</text>
+                    </g>
+                  ))}
+                  {lines.map(({ key, color }) => (
+                    <path key={key} d={mkLine(key)} fill="none" stroke={color} strokeWidth={key === "weighted_total" ? 3 : 2} strokeLinejoin="round" />
+                  ))}
+                  {lines.map(({ key, color }) => (
+                    <circle key={key + "-dot"} cx={xP(pts.length - 1)} cy={yP(last[key] || 0)} r={4} fill={color} />
+                  ))}
+                  {pts.map((p, i) => {
+                    const parts = p.date.split("-");
+                    const lbl = parts.length === 3 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1],10)-1] + " " + parseInt(parts[2],10) : p.date;
+                    return <text key={i} x={xP(i)} y={pH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{lbl}</text>;
+                  })}
+                </svg>
+                <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+                  {lines.map(({ key, color, label }) => (
+                    <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: T.textMuted }}>
+                      <span style={{ width: 14, height: 3, borderRadius: 2, background: color, display: "inline-block" }} />
+                      {label}: <strong style={{ color: T.text }}>{fmtK(last[key] || 0)}</strong>
+                    </span>
+                  ))}
+                </div>
+              </Section>
+              <div style={{ height: 16 }} />
+            </>);
+          })()}
           <div className="chart-row" style={s.chartRow}>
             <Section title="Qualification Recommendation" subtitle="% of pipeline">{(() => { const total = Object.values(d.newbiz.by_recommendation).reduce((a, b) => a + b, 0) || 1; return (<>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>{Object.entries(d.newbiz.by_recommendation).sort((a, b) => b[1] - a[1]).map(([key, count]) => {
@@ -1835,7 +1909,7 @@ export default function Dashboard() {
                 ];
 
                 return (
-                  <Section title="Utilization Trend" subtitle={`Team averages · ${pts.length} data points (weekly) · Utilization = Billable + Clientable`}>
+                  <Section title="Utilization Trend" subtitle={`Team averages · ${pts.length} data points · Updates weekly (Mondays) · Utilization = Billable + Clientable`}>
                     <svg width="100%" viewBox={`0 0 ${utW} ${utH}`} style={{ display: "block" }}>
                       {[0, Math.round(ceil / 4), Math.round(ceil / 2), Math.round((ceil * 3) / 4), ceil].map((v) => (
                         <g key={v}>

@@ -1,6 +1,7 @@
 const { appendHistory } = require("../../../../lib/history");
 const { fetchSnapshot } = require("../../../../lib/smartsheet");
 const { appendDeviationHistory } = require("../../../../lib/deviation-history");
+const { appendPipelineHistory } = require("../../../../lib/pipeline-history");
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,22 @@ export async function GET(request) {
       await appendDeviationHistory(devEntry);
     }
 
-    return Response.json({ success: true, logged: entry, dev_logged: devEntry, total_entries: history.length });
+    // Pipeline snapshot
+    let pipeEntry = null;
+    if (snapshot.newbiz) {
+      const nbEcos = snapshot.newbiz.by_ecosystem || [];
+      const findEco = (name) => nbEcos.find((e) => e.name === name)?.weighted || 0;
+      pipeEntry = {
+        date: dateLabel,
+        weighted_total: snapshot.newbiz.weighted_pipeline || 0,
+        climate: Math.round(findEco("Climate")),
+        real_estate: Math.round(findEco("Real Estate")),
+        health: Math.round(findEco("Health")),
+      };
+      await appendPipelineHistory(pipeEntry);
+    }
+
+    return Response.json({ success: true, logged: entry, dev_logged: devEntry, pipe_logged: pipeEntry, total_entries: history.length });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
