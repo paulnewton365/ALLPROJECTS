@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.12.3";
+const APP_VERSION = "1.13.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -611,7 +611,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const VALID_TABS = ["overview", "live", "redlist", "newbiz", "internal", "dept"];
+  const VALID_TABS = ["overview", "live", "redlist", "deviation", "newbiz", "internal", "dept"];
   const getTabFromHash = () => {
     if (typeof window === "undefined") return "overview";
     const h = window.location.hash.replace("#", "").toLowerCase();
@@ -633,24 +633,27 @@ export default function Dashboard() {
   const [deptData, setDeptData] = useState(null);
   const [deptHistory, setDeptHistory] = useState([]);
   const [utilHistory, setUtilHistory] = useState([]);
+  const [deviationHistory, setDeviationHistory] = useState([]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
         fetch("/api/dept-health-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/util-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
+        fetch("/api/deviation-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
       const dept = await deptRes.json().catch(() => null);
       const deptHist = await deptHistRes.json().catch(() => ({ history: [] }));
       const utilHist = await utilHistRes.json().catch(() => ({ history: [] }));
+      const devHist = await devHistRes.json().catch(() => ({ history: [] }));
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -693,6 +696,7 @@ export default function Dashboard() {
           { key: "overview", label: "Executive Overview" },
           { key: "live", label: "Live Work", count: d.live.count },
           { key: "redlist", label: "Red List", count: d.live.projects.filter((p) => p.rag_color === "red").length },
+          { key: "deviation", label: "Deviation" },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
           { key: "dept", label: "Delivery & Experiences", count: deptData?.utilization_summary?.team_size || null },
@@ -1066,6 +1070,224 @@ export default function Dashboard() {
             </>);
           })()}
         </>)}
+
+        {/* ============ DEVIATION ============ */}
+        {tab === "deviation" && (() => {
+          const dev = d.live.deviation || {};
+          const byEco = dev.by_ecosystem || {};
+          const topDev = dev.top_deviators || [];
+          const redHigh = dev.red_high_deviation || [];
+          const ecoEntries = Object.entries(byEco).filter(([k]) => !["Exec", "Other", "Unassigned"].includes(k)).sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total));
+          const fmtDev = (v) => { const abs = Math.abs(v); const str = abs >= 1000 ? "$" + (abs / 1000).toFixed(1) + "K" : "$" + Math.round(abs); return v < 0 ? "-" + str : "+" + str; };
+          const devColor = (v) => v > 500 ? T.red : v < -500 ? T.blue : T.green;
+
+          // Build trend data: history + current live point
+          const today = new Date().toISOString().split("T")[0];
+          const livePoint = {
+            date: today,
+            climate_eco: Math.round(byEco.Climate?.eco || 0),
+            real_estate_eco: Math.round(byEco["Real Estate"]?.eco || 0),
+            health_eco: Math.round(byEco.Health?.eco || 0),
+            total_ed: dev.total_ed || 0,
+            total_perf: dev.total_perf || 0,
+          };
+          const trendPts = [...(deviationHistory || [])];
+          if (!trendPts.find((p) => p.date === today)) trendPts.push(livePoint);
+          trendPts.sort((a, b) => a.date.localeCompare(b.date));
+
+          return (<>
+            {/* Top-line KPIs */}
+            <div className="kpi-grid" style={s.kpiGrid}>
+              <KPI label="Total Deviation" value={fmtDev(dev.total || 0)} color={devColor(dev.total || 0)} detail="All teams · Last 30 days" />
+              <KPI label="Ecosystem Teams" value={fmtDev(dev.total_ecosystem || 0)} color={devColor(dev.total_ecosystem || 0)} detail="Account & PR" />
+              <KPI label="Experiences & Delivery" value={fmtDev(dev.total_ed || 0)} color={devColor(dev.total_ed || 0)} detail="Creative · Tech · Strategy · PM" />
+              <KPI label="Performance" value={fmtDev(dev.total_perf || 0)} color={devColor(dev.total_perf || 0)} detail="Paid Media · Measurement · Social" />
+              <KPI label="Integrated Solutions" value={fmtDev(dev.total_integrated || 0)} color={devColor(dev.total_integrated || 0)} detail="E&D + Performance" />
+            </div>
+
+            {/* Deviation context */}
+            <div style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 16px", marginBottom: 16, fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>
+              <strong style={{ color: T.text }}>What is deviation?</strong> The difference between booked (scheduled) hours and actual hours logged on timesheets over the last 30 days, expressed in dollars. <span style={{ color: T.red }}>Positive = team logged more time than booked</span> · <span style={{ color: T.blue }}>Negative = logged less than booked</span> · <span style={{ color: T.green }}>Near zero = on track</span>
+            </div>
+
+            {/* Deviation Trend */}
+            {trendPts.length >= 2 ? (
+              <Section title="Deviation Trend" subtitle="Weekly snapshots · Ecosystem totals by vertical + Integrated Solutions breakdown">
+                {(() => {
+                  const tW = 760, tH = 240, tPadL = 55, tPadR = 20, tPadT = 16, tPadB = 30;
+                  const tPlotW = tW - tPadL - tPadR, tPlotH = tH - tPadT - tPadB;
+                  const lines = [
+                    { key: "climate_eco", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
+                    { key: "real_estate_eco", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
+                    { key: "health_eco", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
+                    { key: "total_ed", color: "#7c5cbf", label: "E&D" },
+                    { key: "total_perf", color: "#c49a1a", label: "Performance" },
+                  ];
+                  const allVals = trendPts.flatMap((p) => lines.map((l) => p[l.key] || 0));
+                  const maxAbs = Math.max(Math.abs(Math.min(...allVals)), Math.abs(Math.max(...allVals)), 1000);
+                  const ceil = Math.ceil(maxAbs / 1000) * 1000;
+                  const yT = (v) => tPadT + tPlotH / 2 - (v / ceil) * (tPlotH / 2);
+                  const xT = (i) => tPadL + (i / (trendPts.length - 1)) * tPlotW;
+                  const mkLine = (key) => trendPts.map((p, i) => `${i === 0 ? "M" : "L"}${xT(i).toFixed(1)},${yT(p[key] || 0).toFixed(1)}`).join(" ");
+                  const last = trendPts[trendPts.length - 1];
+                  const gridVals = [-ceil, -ceil / 2, 0, ceil / 2, ceil];
+
+                  return (<>
+                    <svg width="100%" viewBox={`0 0 ${tW} ${tH}`} style={{ display: "block" }}>
+                      {gridVals.map((v) => (
+                        <g key={v}>
+                          <line x1={tPadL} x2={tW - tPadR} y1={yT(v)} y2={yT(v)} stroke={v === 0 ? T.textDim : T.border} strokeWidth={v === 0 ? 1.5 : 1} strokeDasharray={v === 0 ? "none" : "4,3"} />
+                          <text x={tPadL - 6} y={yT(v) + 3} textAnchor="end" fontSize={9} fill={T.textDim}>{v >= 0 ? "+" : ""}{v >= 1000 || v <= -1000 ? (v / 1000).toFixed(0) + "K" : v}</text>
+                        </g>
+                      ))}
+                      {lines.map(({ key, color }) => (
+                        <path key={key} d={mkLine(key)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+                      ))}
+                      {lines.map(({ key, color }) => (
+                        <circle key={key + "-dot"} cx={xT(trendPts.length - 1)} cy={yT(last[key] || 0)} r={4} fill={color} />
+                      ))}
+                      {trendPts.map((p, i) => {
+                        const parts = p.date.split("-");
+                        const lbl = parts.length === 3 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1],10)-1] + " " + parseInt(parts[2],10) : p.date;
+                        return <text key={i} x={xT(i)} y={tH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{lbl}</text>;
+                      })}
+                    </svg>
+                    <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+                      {lines.map(({ key, color, label }) => (
+                        <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: T.textMuted }}>
+                          <span style={{ width: 14, height: 3, borderRadius: 2, background: color, display: "inline-block" }} />
+                          {label}: <strong style={{ color: (last[key] || 0) > 500 ? T.red : (last[key] || 0) < -500 ? T.blue : T.green }}>{fmtDev(last[key] || 0)}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </>);
+                })()}
+              </Section>
+            ) : (
+              <Section title="Deviation Trend" subtitle="Weekly snapshots will appear after the first cron run">
+                <div style={{ textAlign: "center", padding: 30, color: T.textMuted, fontSize: 13 }}>Trend data will populate weekly. Current snapshot shown in KPIs above.</div>
+              </Section>
+            )}
+            <div style={{ height: 16 }} />
+
+            {/* Two-column: Top 10 Deviators + Ecosystem Breakdown */}
+            <div className="chart-row" style={{ ...s.chartRow, marginBottom: 16 }}>
+              {/* Top 10 Deviating Projects */}
+              <Section title="Top 10 Deviating Projects" subtitle="Largest absolute deviation · Last 30 days">
+                <DataTable data={topDev} columns={[
+                  { key: "client", label: "Client", w: 110, style: { fontWeight: 600, fontSize: 12 }, filter: true },
+                  { key: "project", label: "Project", w: 180, style: { fontSize: 11 } },
+                  { key: "ecosystem", label: "Ecosystem", w: 90, style: { fontSize: 11, color: T.textMuted } },
+                  { key: "rag", label: "RAG", w: 50, render: (v) => <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: RAG[v]?.text || T.textDim }} /> },
+                  { key: "deviation", label: "Total Dev", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: v > 500 ? T.red : v < -500 ? T.blue : T.green }}>{fmtDev(v)}</span> },
+                  { key: "deviation_eco", label: "Eco", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                  { key: "deviation_ed", label: "E&D", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                  { key: "deviation_perf", label: "Perf", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                ]} />
+              </Section>
+
+              {/* Deviation by Ecosystem */}
+              <Section title="Deviation by Ecosystem" subtitle="Total deviation per ecosystem · Last 30 days">
+                {(() => {
+                  const maxBar = Math.max(...ecoEntries.map(([, v]) => Math.abs(v.total)), 1);
+                  return (
+                    <div>
+                      {ecoEntries.map(([eco, v]) => {
+                        const pct = (Math.abs(v.total) / maxBar) * 100;
+                        const isPositive = v.total > 0;
+                        return (
+                          <div key={eco} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "4px 0" }}>
+                            <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco] || T.text }}>{eco}</div>
+                            <div style={{ flex: 1, height: 24, background: T.bgHover, borderRadius: 6, overflow: "hidden", position: "relative" }}>
+                              <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: T.border }} />
+                              <div style={{
+                                position: "absolute",
+                                [isPositive ? "left" : "right"]: "50%",
+                                top: 2, bottom: 2,
+                                width: `${pct / 2}%`,
+                                background: isPositive ? T.red : T.blue,
+                                borderRadius: 4,
+                                opacity: 0.75,
+                              }} />
+                            </div>
+                            <div style={{ width: 80, textAlign: "right", fontSize: 12, fontWeight: 700, fontFamily: "monospace", color: v.total > 500 ? T.red : v.total < -500 ? T.blue : T.green }}>{fmtDev(v.total)}</div>
+                          </div>
+                        );
+                      })}
+                      <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 10, fontSize: 10, color: T.textDim }}>
+                        <span>← Underworked (logged less than booked)</span>
+                        <span style={{ color: T.border }}>|</span>
+                        <span>Overworked (logged more than booked) →</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </Section>
+            </div>
+
+            {/* Red RAG High Deviation */}
+            {redHigh.length > 0 && (
+              <Section title="⚠ Red RAG Projects with High Deviation" subtitle={`${redHigh.length} red projects with deviation exceeding +$2,000`}>
+                <DataTable data={redHigh} columns={[
+                  { key: "client", label: "Client", w: 120, style: { fontWeight: 600, fontSize: 12 } },
+                  { key: "project", label: "Project", w: 200, style: { fontSize: 11 } },
+                  { key: "ecosystem", label: "Ecosystem", w: 100, style: { fontSize: 11, color: T.textMuted } },
+                  { key: "deviation", label: "Deviation", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: T.red }}>{fmtDev(v)}</span> },
+                  { key: "overage", label: "Overage", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: v > 0 ? T.red : T.green }}>{fmtK(v)}</span> },
+                  { key: "deviation_eco", label: "Eco Dev", w: 80, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                  { key: "deviation_ed", label: "E&D Dev", w: 80, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                  { key: "deviation_perf", label: "Perf Dev", w: 80, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{v ? fmtDev(v) : "—"}</span> },
+                ]} />
+              </Section>
+            )}
+            {redHigh.length === 0 && (
+              <Section title="Red RAG Projects with High Deviation" subtitle="No red projects with deviation exceeding +$2,000">
+                <div style={{ textAlign: "center", padding: 20, color: T.green, fontSize: 13 }}>✓ No red projects above the +$2,000 deviation threshold</div>
+              </Section>
+            )}
+            <div style={{ height: 16 }} />
+
+            {/* Deviation Distribution */}
+            <Section title="Team Deviation Breakdown" subtitle="Ecosystem vs Experiences & Delivery vs Performance contribution per ecosystem">
+              {(() => {
+                const ecoKeys = ecoEntries.map(([k]) => k);
+                return (
+                  <div>
+                    {ecoKeys.map((eco) => {
+                      const v = byEco[eco];
+                      const parts = [
+                        { label: "Ecosystem", value: v.eco || 0, color: ECO_COLORS[eco] || T.textDim },
+                        { label: "E&D", value: v.ed || 0, color: "#7c5cbf" },
+                        { label: "Performance", value: v.perf || 0, color: "#c49a1a" },
+                      ];
+                      const totalAbs = parts.reduce((s, p) => s + Math.abs(p.value), 0) || 1;
+                      return (
+                        <div key={eco} style={{ marginBottom: 12 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                            <span style={{ width: 110, fontSize: 12, fontWeight: 600, color: ECO_COLORS[eco] || T.text }}>{eco}</span>
+                            <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 700, color: devColor(v.total || 0) }}>{fmtDev(v.total || 0)}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 2, height: 20, borderRadius: 6, overflow: "hidden", background: T.bgHover }}>
+                            {parts.filter((p) => p.value !== 0).map((p) => (
+                              <div key={p.label} style={{ width: `${(Math.abs(p.value) / totalAbs) * 100}%`, background: p.color, opacity: p.value > 0 ? 0.85 : 0.4, position: "relative", minWidth: 4 }}>
+                                <span style={{ position: "absolute", top: 2, left: 4, fontSize: 9, color: "#fff", fontWeight: 700 }}>{Math.abs(p.value) / totalAbs > 0.15 ? p.label : ""}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: "flex", gap: 12, marginTop: 2, fontSize: 10, color: T.textDim }}>
+                            {parts.map((p) => (
+                              <span key={p.label}><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: p.color, marginRight: 3 }} />{p.label}: <span style={{ color: p.value > 0 ? T.red : p.value < 0 ? T.blue : T.textDim, fontWeight: 600 }}>{fmtDev(p.value)}</span></span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </Section>
+          </>);
+        })()}
 
         {/* ============ NEW BUSINESS ============ */}
         {tab === "newbiz" && (<>
@@ -1764,7 +1986,6 @@ export default function Dashboard() {
                   { key: "budget_forecast", label: "Budget", w: 90, fmt: fmtK, style: { fontFamily: "monospace" } },
                   { key: "actuals", label: "Actuals", w: 90, fmt: fmtK, style: { fontFamily: "monospace" } },
                   { key: "overage", label: "Overage", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: v > 0 ? T.red : v < 0 ? T.green : T.text }}>{fmtK(v)}</span> },
-                  { key: "last_weeks_deviation", label: "Wk Deviation", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: v > 0 ? T.red : v < 0 ? T.green : T.textDim }}>{v !== 0 ? fmtK(v) : "—"}</span> },
                   { key: "top_priority", label: "Priority", w: 70, render: (v) => v ? <span style={{ fontSize: 10, fontWeight: 700, color: T.red, background: "#ffebee", padding: "2px 8px", borderRadius: 4 }}>{v}</span> : <span style={{ color: T.textDim }}>—</span> },
                   { key: "pm", label: "PM/Prod", w: 110, filter: true },
                   { key: "percent_complete", label: "% Done", w: 65, render: (v) => <span style={{ fontSize: 12, color: T.textMuted }}>{pct(v)}</span> },

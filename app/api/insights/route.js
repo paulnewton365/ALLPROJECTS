@@ -24,6 +24,12 @@ KEY FIELDS:
 
 ECOSYSTEMS are internal P&L departments: Climate, Real Estate, Health, Public Affairs, HOWL, plus Support and Web Warranty.
 PIPELINE STAGES: In Qualification > Proposal > Waiting For Response > Working On Contract > (Won/Lost). On Hold = paused.
+
+DEVIATION:
+- Last 30 Deviation: Difference between booked (scheduled) hours and actual hours logged on timesheets over 30 days, in dollars
+- Positive = team logged MORE time than was booked (overworking the project)
+- Negative = team logged LESS time than was booked (underworking the project)
+- Broken down by: Ecosystem teams (Account & PR), Experiences & Delivery (Creative, Tech, Strategy, PM), Performance (Paid Media, Measurement, Social)
 `;
 
 export async function POST() {
@@ -41,6 +47,12 @@ export async function POST() {
     const topOverservice = live.projects
       .filter((p) => p.overage > 0).sort((a, b) => b.overage - a.overage).slice(0, 10)
       .map((p) => p.rid + " " + p.client_name + " - " + p.project_name + ": " + p.overage.toLocaleString() + " overage (RAG: " + p.rag + ", Budget: " + p.budget_forecast.toLocaleString() + ")");
+
+    const dev = live.deviation || {};
+    const topDeviators = (dev.top_deviators || []).slice(0, 5).map((p) =>
+      p.rid + " " + p.client + " - " + p.project + " (" + p.ecosystem + "): $" + Math.round(p.deviation).toLocaleString() + " total deviation (Eco: $" + Math.round(p.deviation_eco || 0).toLocaleString() + ", E&D: $" + Math.round(p.deviation_ed || 0).toLocaleString() + ", Perf: $" + Math.round(p.deviation_perf || 0).toLocaleString() + ")");
+    const redHighDev = (dev.red_high_deviation || []).map((p) =>
+      p.rid + " " + p.client + " - " + p.project + ": $" + Math.round(p.deviation).toLocaleString() + " deviation, $" + Math.round(p.overage || 0).toLocaleString() + " overage");
 
     const ecoSummaries = live.by_ecosystem.map((e) =>
       e.name + ": " + e.projects + "p, Budget $" + Math.round(e.budget).toLocaleString() + ", Actuals $" + Math.round(e.actuals).toLocaleString() + ", Burn " + e.burn_rate + "%, Overage $" + Math.round(e.overage).toLocaleString() + ", Investment $" + Math.round(e.investment).toLocaleString());
@@ -82,6 +94,17 @@ export async function POST() {
       ...nbEcoSummary,
       "",
       "INTERNAL PROJECTS (" + internal.count + "): Investment $" + Math.round(internal.total_investment).toLocaleString(),
+      "",
+      "DEVIATION (Last 30 Days — difference between booked time and actual time logged):",
+      "- Total Deviation: $" + Math.round(dev.total || 0).toLocaleString(),
+      "- Ecosystem Teams (Account & PR): $" + Math.round(dev.total_ecosystem || 0).toLocaleString(),
+      "- Experiences & Delivery (Creative, Tech, Strategy, PM): $" + Math.round(dev.total_ed || 0).toLocaleString(),
+      "- Performance (Paid Media, Measurement, Social): $" + Math.round(dev.total_perf || 0).toLocaleString(),
+      "Positive deviation = team logged more time than booked (overworking). Negative = logged less than booked (underworking).",
+      "",
+      "TOP DEVIATING PROJECTS:",
+      ...topDeviators,
+      ...(redHighDev.length ? ["", "RED RAG PROJECTS WITH HIGH DEVIATION (>$2K):", ...redHighDev] : []),
     ].join("\n");
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -92,7 +115,7 @@ export async function POST() {
         max_tokens: 1500,
         messages: [{
           role: "user",
-          content: "You are an executive analyst for Antenna Group, an integrated marketing and communications agency. Review the following live project data and provide a concise executive briefing.\n\n" + DATA_DICTIONARY + "\n\nCURRENT DATA:\n" + dataPayload + "\n\nProvide a brief, sharp executive analysis covering:\n1. Portfolio Health - Overall state of live work. Flag concerning burn rates or overservice by ecosystem.\n2. Revenue Concentration Risk - Is revenue too concentrated in any ecosystem or client?\n3. Overservice Alert - Which projects or ecosystems need immediate attention? Consider investment offset.\n4. Pipeline Outlook - Strength of new business pipeline vs current live revenue. Ecosystem gaps?\n5. Service Trends - What types of work dominate?\n6. One Key Recommendation - Single most important action for leadership this week.\n\nIMPORTANT: Do NOT reference utilization, staff utilization, or employee allocation rates. We do not have utilization data in this dataset. Burn rate refers to project budget consumption (actuals vs budget), not staff utilization. Focus only on data available in the snapshot.\n\nKeep it concise and actionable. Use specific numbers. No fluff. CEO and CFO audience.",
+          content: "You are an executive analyst for Antenna Group, an integrated marketing and communications agency. Review the following live project data and provide a concise executive briefing.\n\n" + DATA_DICTIONARY + "\n\nCURRENT DATA:\n" + dataPayload + "\n\nProvide a brief, sharp executive analysis covering:\n1. Portfolio Health - Overall state of live work. Flag concerning burn rates or overservice by ecosystem.\n2. Revenue Concentration Risk - Is revenue too concentrated in any ecosystem or client?\n3. Overservice Alert - Which projects or ecosystems need immediate attention? Consider investment offset.\n4. Deviation Alert - Highlight significant time deviation trends. Which teams or projects are logging substantially more or less time than booked? What does this signal about resourcing?\n5. Pipeline Outlook - Strength of new business pipeline vs current live revenue. Ecosystem gaps?\n6. One Key Recommendation - Single most important action for leadership this week.\n\nIMPORTANT: Do NOT reference utilization, staff utilization, or employee allocation rates. We do not have utilization data in this dataset. Burn rate refers to project budget consumption (actuals vs budget), not staff utilization. Deviation refers to the gap between booked time and actual time logged on timesheets. Focus only on data available in the snapshot.\n\nKeep it concise and actionable. Use specific numbers. No fluff. CEO and CFO audience.",
         }],
       }),
     });
