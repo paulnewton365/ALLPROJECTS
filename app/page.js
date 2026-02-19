@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.13.1";
+const APP_VERSION = "1.13.2";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1111,7 +1111,7 @@ export default function Dashboard() {
 
             {/* Deviation context */}
             <div style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 10, padding: "14px 20px", marginBottom: 16, fontSize: 13, color: T.textMuted, lineHeight: 1.7, textAlign: "center" }}>
-              <strong style={{ color: T.text }}>What is deviation?</strong> The difference between booked (scheduled) hours and actual hours logged on timesheets over the last 30 days, expressed in dollars. <span style={{ color: T.red }}>Positive = team logged more time than booked</span> · <span style={{ color: T.blue }}>Negative = logged less than booked</span> · <span style={{ color: T.green }}>Near zero = on track</span>
+              <strong style={{ color: T.text }}>What is deviation?</strong> The difference between booked (scheduled) hours and actual hours logged on timesheets over the last 30 days, expressed in dollars.<br/><span style={{ color: T.red }}>Positive = team logged more time than booked</span> · <span style={{ color: T.blue }}>Negative = logged less than booked</span> · <span style={{ color: T.green }}>Near zero = on track</span>
               <br/><em style={{ color: T.text }}>Deviation is a predictor of OS and managing it now will protect OS further down the line.</em>
             </div>
 
@@ -1125,7 +1125,7 @@ export default function Dashboard() {
                     { key: "climate_eco", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
                     { key: "real_estate_eco", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
                     { key: "health_eco", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
-                    { key: "total_ed", color: "#7c5cbf", label: "E&D" },
+                    { key: "total_ed", color: "#7c5cbf", label: "Experiences & Delivery" },
                     { key: "total_perf", color: "#c49a1a", label: "Performance" },
                   ];
                   const allVals = trendPts.flatMap((p) => lines.map((l) => p[l.key] || 0));
@@ -1159,7 +1159,7 @@ export default function Dashboard() {
                     </svg>
                     <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
                       {lines.map(({ key, color, label }) => (
-                        <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: T.textMuted }}>
+                        <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: T.textMuted }}>
                           <span style={{ width: 14, height: 3, borderRadius: 2, background: color, display: "inline-block" }} />
                           {label}: <strong style={{ color: (last[key] || 0) > 500 ? T.red : (last[key] || 0) < -500 ? T.blue : T.green }}>{fmtDev(last[key] || 0)}</strong>
                         </span>
@@ -1255,7 +1255,7 @@ export default function Dashboard() {
             {/* Deviation Distribution */}
             <Section title="Team Deviation Breakdown" subtitle="Account/PR vs Experiences & Delivery vs Performance contribution per ecosystem">
               {(() => {
-                const TEAM_COLORS = { "Account/PR": "#3b73c4", "E&D": "#7c5cbf", "Performance": "#c49a1a" };
+                const TEAM_COLORS = { "Account/PR": "#3b73c4", "Experiences & Delivery": "#7c5cbf", "Performance": "#c49a1a" };
                 const ecoKeys = ecoEntries.map(([k]) => k);
                 const maxAbs = Math.max(...ecoKeys.map((eco) => {
                   const v = byEco[eco];
@@ -1267,7 +1267,7 @@ export default function Dashboard() {
                       const v = byEco[eco];
                       const parts = [
                         { label: "Account/PR", value: v.eco || 0, color: TEAM_COLORS["Account/PR"] },
-                        { label: "E&D", value: v.ed || 0, color: TEAM_COLORS["E&D"] },
+                        { label: "Experiences & Delivery", value: v.ed || 0, color: TEAM_COLORS["Experiences & Delivery"] },
                         { label: "Performance", value: v.perf || 0, color: TEAM_COLORS["Performance"] },
                       ];
                       const totalAbs = parts.reduce((s, p) => s + Math.abs(p.value), 0);
@@ -1298,7 +1298,7 @@ export default function Dashboard() {
                         </div>
                       );
                     })}
-                    <div style={{ display: "flex", gap: 20, justifyContent: "center", marginTop: 10, fontSize: 11, color: T.textDim }}>
+                    <div style={{ display: "flex", gap: 20, justifyContent: "center", marginTop: 10, fontSize: 13, color: T.textMuted }}>
                       {Object.entries(TEAM_COLORS).map(([label, color]) => (
                         <span key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <span style={{ width: 10, height: 10, borderRadius: "50%", background: color }} />{label}
