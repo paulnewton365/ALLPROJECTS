@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.13.3";
+const APP_VERSION = "1.13.4";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1098,7 +1098,7 @@ export default function Dashboard() {
           const baseDate = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
           const baselinePoint = { ...livePoint, date: baseDate };
           const trendPts = [...(deviationHistory || [])];
-          if (!trendPts.find((p) => p.date === baseDate) && trendPts.length === 0) trendPts.push(baselinePoint);
+          if (!trendPts.find((p) => p.date === baseDate)) trendPts.push(baselinePoint);
           if (!trendPts.find((p) => p.date === today)) trendPts.push(livePoint);
           trendPts.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -1343,7 +1343,7 @@ export default function Dashboard() {
             const baseDate = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
             const baselinePoint = { ...livePoint, date: baseDate };
             const pts = [...(pipelineHistory || [])];
-            if (!pts.find((p) => p.date === baseDate) && pts.length === 0) pts.push(baselinePoint);
+            if (!pts.find((p) => p.date === baseDate)) pts.push(baselinePoint);
             if (!pts.find((p) => p.date === today)) pts.push(livePoint);
             pts.sort((a, b) => a.date.localeCompare(b.date));
             if (pts.length < 2) return null;
