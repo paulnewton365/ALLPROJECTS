@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.14.5";
+const APP_VERSION = "1.14.6";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -819,7 +819,7 @@ export default function Dashboard() {
             <KPI label="OOP" value={fmtK(d.live.financials.total_oop)} />
             <KPI label="Overserviced Projects" value={d.live.financials.overserviced_count} color={d.live.financials.overserviced_count > 0 ? T.red : T.green} />
             <KPI label="Investment" value={fmtK(d.live.financials.total_investment)} />
-            <KPI label="Missing Time" value={fmtK(d.live.financials.missing_time_total)} color={d.live.financials.missing_time_total > 5000 ? T.yellow : T.green} />
+
           </div>
           <div className="chart-row" style={s.chartRow}>
             <Section title="Live Revenue" subtitle="Billable P&Ls"><BarChart data={liveEcoBillable} labelKey="name" valueKey="budget" color={T.text} formatValue={fmtK} /></Section>
