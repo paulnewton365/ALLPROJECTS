@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.14.1";
+const APP_VERSION = "1.14.2";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1766,6 +1766,20 @@ export default function Dashboard() {
                 { key: "happiness", label: "Pressure", w: 75, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{v}</span> },
               ]} />
             </Section>
+
+            {/* Sabbaticals */}
+            {(au.sabbaticals || []).length > 0 && (<>
+              <div style={{ height: 16 }} />
+              <Section title="Upcoming Sabbaticals" subtitle={`${au.sabbaticals.length} approved sabbaticals · Sorted by start date`}>
+                <DataTable data={au.sabbaticals} columns={[
+                  { key: "name", label: "Team Member", w: 160, style: { fontWeight: 600, fontSize: 12 } },
+                  { key: "start", label: "Start", w: 90, style: { fontFamily: "monospace", fontSize: 12 } },
+                  { key: "end", label: "End", w: 90, style: { fontFamily: "monospace", fontSize: 12 } },
+                  { key: "ecosystem", label: "Ecosystem", w: 120, render: (v) => <span style={{ fontSize: 11, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
+                  { key: "status", label: "Status", w: 120, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: v === "Approved" ? T.green : v === "Dept Head Approved" ? "#c49a1a" : T.textDim, background: v === "Approved" ? "#e8f5e9" : v === "Dept Head Approved" ? "#fff8e1" : T.bgHover, padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
+                ]} />
+              </Section>
+            </>)}
           </>);
         })()}
 

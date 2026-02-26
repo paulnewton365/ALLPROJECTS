@@ -139,6 +139,53 @@ export async function GET() {
     // Status distribution
     const statusDist = { over: overCount, utilized: utilizedCount, capacity: capacityCount };
 
+    // Sabbatical data
+    let sabbaticals = [];
+    try {
+      const SAB_REPORT = process.env.SABBATICAL_REPORT_ID || "5355978313650052";
+      const sabRaw = await apiRequest(`/reports/${SAB_REPORT}?pageSize=200`);
+      const sabCols = sabRaw.columns || [];
+      const sabRows = (sabRaw.rows || []).map((row) => reportRowToObject(row, sabCols));
+
+      // Group detail rows by Team Member, extract min start, max end, first row's ecosystem & status
+      const grouped = {};
+      for (const row of sabRows) {
+        const name = String(row["Team Member"] || "").trim();
+        if (!name || name === "Total") continue;
+        const startRaw = row["Sabbatical Start"];
+        const endRaw = row["Sabbatical End"];
+        const eco = String(row["People Ecosystem (people)"] || row["People Ecosystem"] || "").trim();
+        const status = String(row["Request Status"] || "").trim();
+        // Skip summary/header rows (no real date or Primary is empty-ish)
+        const primary = String(row["Primary"] || "").trim();
+        if (!primary || !startRaw) continue;
+        if (!grouped[name]) grouped[name] = { name, starts: [], ends: [], ecosystem: eco, status: status };
+        const startStr = String(startRaw).trim();
+        const endStr = String(endRaw || "").trim();
+        if (startStr) grouped[name].starts.push(startStr);
+        if (endStr) grouped[name].ends.push(endStr);
+        // Use first detail row's ecosystem and status
+        if (!grouped[name].ecosystem && eco) grouped[name].ecosystem = eco;
+        if (!grouped[name].status && status) grouped[name].status = status;
+      }
+
+      sabbaticals = Object.values(grouped).map((g) => {
+        // Parse dates to find earliest start and latest end
+        const parseDt = (s) => { const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+        const starts = g.starts.map(parseDt).filter(Boolean).sort((a, b) => a - b);
+        const ends = g.ends.map(parseDt).filter(Boolean).sort((a, b) => b - a);
+        const fmtDt = (d) => { const m = d.getMonth() + 1; const dy = d.getDate(); const y = String(d.getFullYear()).slice(-2); return `${String(m).padStart(2,"0")}/${String(dy).padStart(2,"0")}/${y}`; };
+        return {
+          name: g.name,
+          start: starts.length ? fmtDt(starts[0]) : "-",
+          end: ends.length ? fmtDt(ends[0]) : "-",
+          start_raw: starts.length ? starts[0].toISOString().split("T")[0] : null,
+          ecosystem: g.ecosystem || "-",
+          status: g.status || "-",
+        };
+      }).sort((a, b) => (a.start_raw || "").localeCompare(b.start_raw || ""));
+    } catch (e) { console.error("Sabbatical fetch error:", e.message); }
+
     return Response.json({
       team_size: total,
       avg_utilization: avgUtil,
@@ -151,6 +198,7 @@ export async function GET() {
       by_ecosystem: ecoSummary,
       by_level: levelSummary,
       people: people.sort((a, b) => a.utilization - b.utilization),
+      sabbaticals,
     });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
