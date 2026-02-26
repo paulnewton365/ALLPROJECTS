@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.14.3";
+const APP_VERSION = "1.14.5";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1562,6 +1562,7 @@ export default function Dashboard() {
           const ecoName = (e) => ECO_DISPLAY[e] || e;
           const statusColors = { Over: T.red, Utilized: T.green, Capacity: "#c49a1a" };
           const happColors = { Extreme: T.red, Severe: "#c49a1a", "No Pain": T.green };
+          const happLabels = { Extreme: "Check In", Severe: "Review Allocations", "No Pain": "Manageable" };
 
           // Trend data
           const today = new Date().toISOString().split("T")[0];
@@ -1591,7 +1592,7 @@ export default function Dashboard() {
               <KPI label="Avg Billable" value={`${au.avg_billable || 0}%`} color={T.blue} detail="Utilization minus NB/Internal" />
               <KPI label="Avg Admin Time" value={`${au.avg_admin}%`} color={au.avg_admin > 25 ? T.red : T.textDim} detail="Non-billable admin" />
               <KPI label="Over-Utilized" value={au.status.over} color={T.red} detail={`${au.status.utilized} on target · ${au.status.capacity} capacity`} />
-              <KPI label="Workload Pressure" value={`${au.happiness.extreme + au.happiness.severe}/${au.team_size}`} color={au.happiness.extreme > 5 ? T.red : "#c49a1a"} detail={`${au.happiness.extreme} extreme · ${au.happiness.severe} severe`} />
+              <KPI label="Workload Pressure" value={`${au.happiness.extreme + au.happiness.severe}/${au.team_size}`} color={au.happiness.extreme > 5 ? T.red : "#c49a1a"} detail={`${au.happiness.extreme} check in · ${au.happiness.severe} review allocations`} />
             </div>
 
             {/* Status + Happiness distribution */}
@@ -1618,17 +1619,17 @@ export default function Dashboard() {
                 })()}
               </Section>
 
-              <Section title="Workload Pressure" subtitle="Happiness measure across team">
+              <Section title="Workload Pressure" subtitle="Workload assessment across team">
                 {(() => {
                   const bars = [
-                    { label: "Extreme", count: au.happiness.extreme, color: T.red },
-                    { label: "Severe", count: au.happiness.severe, color: "#c49a1a" },
-                    { label: "No Pain", count: au.happiness.no_pain, color: T.green },
+                    { label: "Check In", count: au.happiness.extreme, color: T.red },
+                    { label: "Review Allocations", count: au.happiness.severe, color: "#c49a1a" },
+                    { label: "Manageable", count: au.happiness.no_pain, color: T.green },
                   ];
                   const maxB = Math.max(...bars.map((b) => b.count), 1);
                   return <div>{bars.map((b) => (
                     <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                      <div style={{ width: 120, fontSize: 13, fontWeight: 600, color: b.color }}>{b.label}</div>
+                      <div style={{ width: 155, fontSize: 13, fontWeight: 600, color: b.color }}>{b.label}</div>
                       <div style={{ flex: 1, height: 32, background: T.bgHover, borderRadius: 8, overflow: "hidden" }}>
                         <div style={{ height: "100%", width: `${(b.count / maxB) * 100}%`, background: b.color, borderRadius: 8, opacity: 0.75, display: "flex", alignItems: "center", paddingLeft: 10 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{b.count}</span>
@@ -1642,7 +1643,7 @@ export default function Dashboard() {
             </div>
 
             {/* Utilization by Ecosystem */}
-            <Section title="Utilization by Ecosystem" subtitle="Average utilization vs target per team">
+            <Section title="Clientable Utilization by Ecosystem" subtitle="Average utilization vs target per team">
               {ecos.map((eco) => {
                 const pct = eco.avg_utilization;
                 const target = eco.avg_target;
@@ -1683,7 +1684,7 @@ export default function Dashboard() {
                 })}
               </Section>
 
-              <Section title="Utilization by Level" subtitle="Average utilization vs target per seniority level">
+              <Section title="Clientable Utilization by Level" subtitle="Average utilization vs target per seniority level">
                 {(au.by_level || []).filter((lvl) => lvl.name !== "Not Found" && !lvl.name.includes("EVP")).map((lvl) => {
                   const pct = lvl.avg_utilization;
                   const target = lvl.avg_target;
@@ -1706,7 +1707,7 @@ export default function Dashboard() {
 
             {/* Utilization Trend */}
             {uPts.length >= 2 && (
-              <Section title="Utilization Trend" subtitle="Weekly avg utilization per ecosystem · Updates weekly (Mondays)">
+              <Section title="Clientable Utilization Trend" subtitle="Weekly avg utilization per ecosystem · Updates weekly (Mondays)">
                 {(() => {
                   const utW = 760, utH = 240, utPadL = 40, utPadR = 60, utPadT = 16, utPadB = 30;
                   const utPlotW = utW - utPadL - utPadR, utPlotH = utH - utPadT - utPadB;
@@ -1785,7 +1786,7 @@ export default function Dashboard() {
                 { key: "utilization_target", label: "Target", w: 55, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: T.textDim }}>{v}%</span> },
                 { key: "admin_time", label: "Admin", w: 55, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 30 ? T.red : T.textDim }}>{v}%</span> },
                 { key: "utilization_status", label: "Status", w: 75, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: statusColors[v] || T.textDim, background: v === "Over" ? "#ffebee" : v === "Capacity" ? "#fff8e1" : "#e8f5e9", padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
-                { key: "happiness", label: "Pressure", w: 75, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{v}</span> },
+                { key: "happiness", label: "Pressure", w: 95, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{happLabels[v] || v}</span> },
               ]} />
             </Section>
           </>);
