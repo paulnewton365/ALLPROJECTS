@@ -73,6 +73,7 @@ export async function GET() {
     const avgUtil = total > 0 ? Math.round(people.reduce((s, p) => s + p.utilization, 0) / total) : 0;
     const avgTarget = total > 0 ? Math.round(people.reduce((s, p) => s + p.utilization_target, 0) / total) : 0;
     const avgAdmin = total > 0 ? Math.round(people.reduce((s, p) => s + p.admin_time, 0) / total) : 0;
+    const avgBillable = total > 0 ? Math.round(people.reduce((s, p) => s + Math.max(0, p.utilization - p.nb_internal), 0) / total) : 0;
     const avgProjects = total > 0 ? Math.round((people.reduce((s, p) => s + p.num_projects, 0) / total) * 10) / 10 : 0;
     const overCount = people.filter((p) => p.utilization_status === "Over").length;
     const capacityCount = people.filter((p) => p.utilization_status === "Capacity").length;
@@ -82,13 +83,14 @@ export async function GET() {
     const byEcosystem = {};
     people.forEach((p) => {
       const eco = p.ecosystem || "OTHER";
-      if (!byEcosystem[eco]) byEcosystem[eco] = { count: 0, total_util: 0, total_target: 0, total_admin: 0, total_projects: 0, over: 0, capacity: 0, utilized: 0, extreme: 0, severe: 0 };
+      if (!byEcosystem[eco]) byEcosystem[eco] = { count: 0, total_util: 0, total_target: 0, total_admin: 0, total_projects: 0, total_billable: 0, over: 0, capacity: 0, utilized: 0, extreme: 0, severe: 0 };
       const e = byEcosystem[eco];
       e.count++;
       e.total_util += p.utilization;
       e.total_target += p.utilization_target;
       e.total_admin += p.admin_time;
       e.total_projects += p.num_projects;
+      e.total_billable += Math.max(0, p.utilization - p.nb_internal);
       if (p.utilization_status === "Over") e.over++;
       if (p.utilization_status === "Capacity") e.capacity++;
       if (p.utilization_status === "Utilized") e.utilized++;
@@ -102,6 +104,7 @@ export async function GET() {
       avg_utilization: Math.round(e.total_util / e.count),
       avg_target: Math.round(e.total_target / e.count),
       avg_admin: Math.round(e.total_admin / e.count),
+      avg_billable: Math.round(e.total_billable / e.count),
       avg_projects: Math.round((e.total_projects / e.count) * 10) / 10,
       over: e.over,
       capacity: e.capacity,
@@ -109,6 +112,22 @@ export async function GET() {
       extreme: e.extreme,
       severe: e.severe,
     })).sort((a, b) => b.count - a.count);
+
+    // By level
+    const byLevel = {};
+    people.forEach((p) => {
+      const lvl = p.level || "Unknown";
+      if (!byLevel[lvl]) byLevel[lvl] = { count: 0, total_util: 0, total_target: 0 };
+      byLevel[lvl].count++;
+      byLevel[lvl].total_util += p.utilization;
+      byLevel[lvl].total_target += p.utilization_target;
+    });
+    const levelSummary = Object.entries(byLevel).map(([name, v]) => ({
+      name,
+      count: v.count,
+      avg_utilization: Math.round(v.total_util / v.count),
+      avg_target: Math.round(v.total_target / v.count),
+    })).sort((a, b) => a.name.localeCompare(b.name));
 
     // Happiness distribution
     const happiness = {
@@ -125,10 +144,12 @@ export async function GET() {
       avg_utilization: avgUtil,
       avg_target: avgTarget,
       avg_admin: avgAdmin,
+      avg_billable: avgBillable,
       avg_projects: avgProjects,
       status: statusDist,
       happiness,
       by_ecosystem: ecoSummary,
+      by_level: levelSummary,
       people: people.sort((a, b) => a.utilization - b.utilization),
     });
   } catch (err) {

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.14.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1584,6 +1584,7 @@ export default function Dashboard() {
             <div className="kpi-grid" style={s.kpiGrid}>
               <KPI label="Team Size" value={au.team_size} detail={`Avg ${au.avg_projects} projects each`} />
               <KPI label="Avg Utilization" value={`${au.avg_utilization}%`} color={au.avg_utilization >= au.avg_target ? T.green : T.red} detail={`Target: ${au.avg_target}%`} trend={prevUtilPt ? au.avg_utilization - prevUtilPt.avg_utilization : null} trendGoodUp={true} />
+              <KPI label="Avg Billable" value={`${au.avg_billable || 0}%`} color={T.blue} detail="Utilization minus NB/Internal" />
               <KPI label="Avg Admin Time" value={`${au.avg_admin}%`} color={au.avg_admin > 25 ? T.red : T.textDim} detail="Non-billable admin" />
               <KPI label="Over-Utilized" value={au.status.over} color={T.red} detail={`${au.status.utilized} on target · ${au.status.capacity} capacity`} />
               <KPI label="Workload Pressure" value={`${au.happiness.extreme + au.happiness.severe}/${au.team_size}`} color={au.happiness.extreme > 5 ? T.red : "#c49a1a"} detail={`${au.happiness.extreme} extreme · ${au.happiness.severe} severe`} />
@@ -1657,11 +1658,49 @@ export default function Dashboard() {
             </Section>
             <div style={{ height: 16 }} />
 
+            {/* Billable by Ecosystem + Utilization by Level */}
+            <div className="chart-row" style={s.chartRow}>
+              <Section title="Billable % by Ecosystem" subtitle="Utilization minus NB/Internal per team">
+                {ecos.map((eco) => {
+                  const bill = eco.avg_billable || 0;
+                  return (
+                    <div key={eco.name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "4px 0" }}>
+                      <div style={{ width: 130, fontSize: 13, fontWeight: 700, color: ECO_COLORS[ecoName(eco.name)] || T.text }}>{ecoName(eco.name)} <span style={{ fontWeight: 400, fontSize: 11, color: T.textDim }}>({eco.count})</span></div>
+                      <div style={{ flex: 1, height: 28, background: T.bgHover, borderRadius: 8, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${bill}%`, background: T.blue, borderRadius: 8, opacity: 0.7 }} />
+                      </div>
+                      <div style={{ width: 50, textAlign: "right", fontSize: 13, fontWeight: 700, fontFamily: "monospace", color: T.blue }}>{bill}%</div>
+                    </div>
+                  );
+                })}
+              </Section>
+
+              <Section title="Utilization by Level" subtitle="Average utilization vs target per seniority level">
+                {(au.by_level || []).map((lvl) => {
+                  const pct = lvl.avg_utilization;
+                  const target = lvl.avg_target;
+                  const atTarget = pct >= target;
+                  const label = lvl.name.replace(/^\d+_/, "");
+                  return (
+                    <div key={lvl.name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, padding: "3px 0" }}>
+                      <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: T.text }}>{label} <span style={{ fontWeight: 400, fontSize: 10, color: T.textDim }}>({lvl.count})</span></div>
+                      <div style={{ flex: 1, height: 24, background: T.bgHover, borderRadius: 6, overflow: "hidden", position: "relative" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: atTarget ? T.green : T.red, borderRadius: 6, opacity: 0.7 }} />
+                        {target > 0 && <div style={{ position: "absolute", left: `${target}%`, top: 0, bottom: 0, width: 2, background: T.text, opacity: 0.5 }} />}
+                      </div>
+                      <div style={{ width: 50, textAlign: "right", fontSize: 12, fontWeight: 700, fontFamily: "monospace", color: atTarget ? T.green : T.red }}>{pct}%</div>
+                      <div style={{ width: 45, textAlign: "right", fontSize: 10, color: T.textDim }}>tgt {target}%</div>
+                    </div>
+                  );
+                })}
+              </Section>
+            </div>
+
             {/* Utilization Trend */}
             {uPts.length >= 2 && (
               <Section title="Utilization Trend" subtitle="Weekly avg utilization per ecosystem · Updates weekly (Mondays)">
                 {(() => {
-                  const utW = 760, utH = 240, utPadL = 40, utPadR = 20, utPadT = 16, utPadB = 30;
+                  const utW = 760, utH = 240, utPadL = 40, utPadR = 60, utPadT = 16, utPadB = 30;
                   const utPlotW = utW - utPadL - utPadR, utPlotH = utH - utPadT - utPadB;
                   const tLines = [
                     { key: "climate", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
@@ -1676,12 +1715,16 @@ export default function Dashboard() {
                   const xU = (i) => utPadL + (i / (uPts.length - 1)) * utPlotW;
                   const mkL = (key) => uPts.map((p, i) => `${i === 0 ? "M" : "L"}${xU(i).toFixed(1)},${yU(p[key] || 0).toFixed(1)}`).join(" ");
                   const last = uPts[uPts.length - 1];
+                  const agencyTarget = au.avg_target || 70;
 
                   return (<>
                     <svg width="100%" viewBox={`0 0 ${utW} ${utH}`} style={{ display: "block" }}>
                       {[0, Math.round(ceil / 4), Math.round(ceil / 2), Math.round(ceil * 3 / 4), ceil].map((v) => (
                         <g key={v}><line x1={utPadL} x2={utW - utPadR} y1={yU(v)} y2={yU(v)} stroke={T.border} strokeWidth={1} /><text x={utPadL - 6} y={yU(v) + 3} textAnchor="end" fontSize={9} fill={T.textDim}>{v}%</text></g>
                       ))}
+                      {/* Agency target line */}
+                      <line x1={utPadL} x2={utW - utPadR} y1={yU(agencyTarget)} y2={yU(agencyTarget)} stroke={T.text} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.5} />
+                      <text x={utW - utPadR + 4} y={yU(agencyTarget) + 3} fontSize={9} fill={T.text} fontWeight={600} opacity={0.6}>Target {agencyTarget}%</text>
                       {tLines.map(({ key, color }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />)}
                       {tLines.map(({ key, color }) => <circle key={key + "-d"} cx={xU(uPts.length - 1)} cy={yU(last[key] || 0)} r={4} fill={color} />)}
                       {uPts.map((p, i) => {
@@ -1706,20 +1749,21 @@ export default function Dashboard() {
 
             {/* Team Utilization Table */}
             <Section title="Team Utilization — Last 30 Days" subtitle={`${ppl.length} team members · Sorted by utilization`}>
-              <DataTable data={ppl} columns={[
+              <DataTable data={ppl.map((p) => ({ ...p, billable: Math.max(0, p.utilization - p.nb_internal) }))} columns={[
                 { key: "name", label: "Name", w: 150, style: { fontWeight: 600, fontSize: 12 }, filter: true },
                 { key: "ecosystem", label: "Ecosystem", w: 100, render: (v) => <span style={{ fontSize: 11, color: ECO_COLORS[ecoName(v)] || T.textMuted }}>{ecoName(v)}</span>, filter: true },
-                { key: "primary_group", label: "Role", w: 130, style: { fontSize: 11, color: T.textMuted }, filter: true },
-                { key: "level", label: "Level", w: 80, style: { fontSize: 11 } },
-                { key: "num_projects", label: "Projects", w: 65, style: { fontFamily: "monospace", fontSize: 12 } },
-                { key: "utilization", label: "Utilization", w: 85, render: (v, row) => {
+                { key: "primary_group", label: "Role", w: 120, style: { fontSize: 11, color: T.textMuted }, filter: true },
+                { key: "level", label: "Level", w: 75, style: { fontSize: 11 } },
+                { key: "num_projects", label: "Projects", w: 55, style: { fontFamily: "monospace", fontSize: 12 } },
+                { key: "utilization", label: "Utilization", w: 80, render: (v, row) => {
                   const atTarget = v >= (row.utilization_target || 0);
                   return <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: v >= 85 ? T.red : atTarget ? T.green : "#c49a1a" }}>{v}%</span>;
                 }},
-                { key: "utilization_target", label: "Target", w: 60, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: T.textDim }}>{v}%</span> },
-                { key: "admin_time", label: "Admin", w: 60, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 30 ? T.red : T.textDim }}>{v}%</span> },
-                { key: "utilization_status", label: "Status", w: 80, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: statusColors[v] || T.textDim, background: v === "Over" ? "#ffebee" : v === "Capacity" ? "#fff8e1" : "#e8f5e9", padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
-                { key: "happiness", label: "Pressure", w: 80, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{v}</span> },
+                { key: "billable", label: "Billable", w: 70, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: T.blue }}>{v}%</span> },
+                { key: "utilization_target", label: "Target", w: 55, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: T.textDim }}>{v}%</span> },
+                { key: "admin_time", label: "Admin", w: 55, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 30 ? T.red : T.textDim }}>{v}%</span> },
+                { key: "utilization_status", label: "Status", w: 75, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: statusColors[v] || T.textDim, background: v === "Over" ? "#ffebee" : v === "Capacity" ? "#fff8e1" : "#e8f5e9", padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
+                { key: "happiness", label: "Pressure", w: 75, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{v}</span> },
               ]} />
             </Section>
           </>);
