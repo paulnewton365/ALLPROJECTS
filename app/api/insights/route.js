@@ -30,6 +30,13 @@ DEVIATION:
 - Positive = team logged MORE time than was booked (overworking the project)
 - Negative = team logged LESS time than was booked (underworking the project)
 - Broken down by: Ecosystem teams (Account & PR), Experiences & Delivery (Creative, Tech, Strategy, PM), Performance (Paid Media, Measurement, Social)
+
+UTILIZATION:
+- Utilization: Percentage of available time spent on client/project work (last 30 days)
+- Utilization Target: Expected utilization percentage for the role/level
+- Utilization Status: Over (exceeds target significantly), Utilized (at or near target), Capacity (below target, has bandwidth)
+- Happiness Measure: Workload pressure indicator — Extreme (dangerously overloaded), Severe (stretched), No Pain (comfortable)
+- Admin Time: Percentage of time on non-billable admin work
 `;
 
 export async function POST() {
@@ -43,6 +50,46 @@ export async function POST() {
     const live = snapshot.live;
     const nb = snapshot.newbiz;
     const internal = snapshot.internal;
+
+    // Fetch agency utilization
+    let utilSummary = "";
+    try {
+      const BASE_URL = "https://api.smartsheet.com/2.0";
+      const ssToken = process.env.SMARTSHEET_API_TOKEN;
+      const UTIL_REPORT = process.env.AGENCY_UTILIZATION_REPORT_ID || "4581510595170180";
+      if (ssToken) {
+        const utilRes = await fetch(`${BASE_URL}/reports/${UTIL_REPORT}?pageSize=200`, { headers: { Authorization: `Bearer ${ssToken}`, "Content-Type": "application/json" } });
+        if (utilRes.ok) {
+          const utilRaw = await utilRes.json();
+          const cols = utilRaw.columns || [];
+          const ppl = (utilRaw.rows || []).map((row) => {
+            const item = {};
+            (row.cells || []).forEach((cell, i) => { if (cols[i]) item[cols[i].title] = cell.displayValue ?? cell.value ?? null; });
+            const name = String(item["Team Member"] || "").trim();
+            if (!name) return null;
+            const util = parseFloat(String(item["Utilization"] || "0").replace(/%/g, ""));
+            const utilPct = util > 0 && util < 1 ? Math.round(util * 1000) / 10 : Math.round(util);
+            return { name, eco: String(item["ECOSYSTEM"] || "").trim(), status: String(item["UTILIZATION STATUS"] || ""), happiness: String(item["HAPPINESS MEASURE"] || ""), utilPct };
+          }).filter(Boolean);
+          const tot = ppl.length;
+          const avg = tot > 0 ? Math.round(ppl.reduce((s, p) => s + p.utilPct, 0) / tot) : 0;
+          const over = ppl.filter((p) => p.status === "Over").length;
+          const capacity = ppl.filter((p) => p.status === "Capacity").length;
+          const extreme = ppl.filter((p) => p.happiness === "Extreme").length;
+          const severe = ppl.filter((p) => p.happiness === "Severe").length;
+          const ecoMap = {};
+          ppl.forEach((p) => { if (!ecoMap[p.eco]) ecoMap[p.eco] = { t: 0, c: 0 }; ecoMap[p.eco].t += p.utilPct; ecoMap[p.eco].c++; });
+          const ecoLines = Object.entries(ecoMap).map(([e, v]) => e + ": " + Math.round(v.t / v.c) + "% avg (" + v.c + " people)");
+          utilSummary = [
+            "", "AGENCY UTILIZATION (" + tot + " team members):",
+            "- Average Utilization: " + avg + "%",
+            "- Over-Utilized: " + over + ", Capacity (available): " + capacity,
+            "- Workload Pressure: " + extreme + " extreme, " + severe + " severe",
+            "BY ECOSYSTEM:", ...ecoLines,
+          ].join("\n");
+        }
+      }
+    } catch (e) { /* skip util if it fails */ }
 
     const topOverservice = live.projects
       .filter((p) => p.overage > 0).sort((a, b) => b.overage - a.overage).slice(0, 10)
@@ -105,6 +152,7 @@ export async function POST() {
       "TOP DEVIATING PROJECTS:",
       ...topDeviators,
       ...(redHighDev.length ? ["", "RED RAG PROJECTS WITH HIGH DEVIATION (>$2K):", ...redHighDev] : []),
+      utilSummary,
     ].join("\n");
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -115,7 +163,7 @@ export async function POST() {
         max_tokens: 1500,
         messages: [{
           role: "user",
-          content: "You are an executive analyst for Antenna Group, an integrated marketing and communications agency. Review the following live project data and provide a concise executive briefing.\n\n" + DATA_DICTIONARY + "\n\nCURRENT DATA:\n" + dataPayload + "\n\nProvide a brief, sharp executive analysis covering:\n1. Portfolio Health - Overall state of live work. Flag concerning burn rates or overservice by ecosystem.\n2. Revenue Concentration Risk - Is revenue too concentrated in any ecosystem or client?\n3. Overservice Alert - Which projects or ecosystems need immediate attention? Consider investment offset.\n4. Deviation Alert - Highlight significant time deviation trends. Which teams or projects are logging substantially more or less time than booked? What does this signal about resourcing?\n5. Pipeline Outlook - Strength of new business pipeline vs current live revenue. Ecosystem gaps?\n6. One Key Recommendation - Single most important action for leadership this week.\n\nIMPORTANT: Do NOT reference utilization, staff utilization, or employee allocation rates. We do not have utilization data in this dataset. Burn rate refers to project budget consumption (actuals vs budget), not staff utilization. Deviation refers to the gap between booked time and actual time logged on timesheets. Focus only on data available in the snapshot.\n\nKeep it concise and actionable. Use specific numbers. No fluff. CEO and CFO audience.",
+          content: "You are an executive analyst for Antenna Group, an integrated marketing and communications agency. Review the following live project data and provide a concise executive briefing.\n\n" + DATA_DICTIONARY + "\n\nCURRENT DATA:\n" + dataPayload + "\n\nProvide a brief, sharp executive analysis covering:\n1. Portfolio Health - Overall state of live work. Flag concerning burn rates or overservice by ecosystem.\n2. Revenue Concentration Risk - Is revenue too concentrated in any ecosystem or client?\n3. Overservice Alert - Which projects or ecosystems need immediate attention? Consider investment offset.\n4. Deviation Alert - Highlight significant time deviation trends. Which teams or projects are logging substantially more or less time than booked? What does this signal about resourcing?\n5. Utilization & Capacity - Are teams appropriately utilized? Flag any ecosystems with too many over-utilized or extreme workload staff. Where is there capacity for new work?\n6. Pipeline Outlook - Strength of new business pipeline vs current live revenue. Ecosystem gaps?\n7. One Key Recommendation - Single most important action for leadership this week.\n\nBurn rate refers to project budget consumption (actuals vs budget). Deviation refers to the gap between booked time and actual time logged on timesheets. Utilization refers to the percentage of available time spent on client work. Focus only on data available in the snapshot.\n\nKeep it concise and actionable. Use specific numbers. No fluff. CEO and CFO audience.",
         }],
       }),
     });

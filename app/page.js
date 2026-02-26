@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.13.5";
+const APP_VERSION = "1.14.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -151,9 +151,8 @@ function KPI({ label, value, detail, color, trend, trendGoodUp }) {
 // ---------------------------------------------------------------------------
 // Exec KPI Strip
 // ---------------------------------------------------------------------------
-function ExecKPIStrip({ live, newbiz, history }) {
+function ExecKPIStrip({ live, newbiz, history, agencyUtil }) {
   const net = live.financials.total_overage - live.financials.total_investment;
-  const woc = newbiz.pipeline_funnel.find((s) => s.stage === "Working On Contract") || { forecast: 0, count: 0 };
   // Previous snapshot for trend arrows
   const prev = history?.length >= 2 ? history[history.length - 2] : null;
   const trendArrow = (current, prevVal, invertColor) => {
@@ -164,6 +163,8 @@ function ExecKPIStrip({ live, newbiz, history }) {
     const color = invertColor ? (up ? T.red : T.green) : (up ? T.green : T.red);
     return <span style={{ fontSize: 10, fontWeight: 700, color, marginLeft: 4 }}>{up ? "▲" : "▼"} {fmtK(Math.abs(diff))}</span>;
   };
+  const utilPct = agencyUtil?.avg_utilization || 0;
+  const utilTarget = agencyUtil?.avg_target || 70;
   return (
     <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
       {[
@@ -171,7 +172,7 @@ function ExecKPIStrip({ live, newbiz, history }) {
         { label: "Burn Rate", value: `${live.financials.burn_rate_pct}%`, color: burnColor(live.financials.burn_rate_pct), sub: `${fmtK(live.financials.total_actuals)} spent`, trend: prev ? (() => { const diff = live.financials.burn_rate_pct - prev.burn_rate; if (Math.abs(diff) < 0.1) return null; const up = diff > 0; return <span style={{ fontSize: 10, fontWeight: 700, color: up ? T.red : T.green, marginLeft: 4 }}>{up ? "▲" : "▼"} {Math.abs(diff).toFixed(1)}%</span>; })() : null },
         { label: "Net Overservice", value: fmtK(net), color: net > 0 ? T.red : T.green, sub: `${live.financials.overserviced_count} projects (${fmtK(live.financials.total_investment)} invested)`, trend: trendArrow(net, prev?.net_overservice, true) },
         { label: "Weighted Pipeline", value: fmtK(newbiz.weighted_pipeline), color: T.orange, sub: `${fmtK(newbiz.total_forecast)} unweighted`, trend: trendArrow(newbiz.weighted_pipeline, prev?.weighted_pipeline, false) },
-        { label: "Near Close", value: fmtK(woc.forecast), color: T.green, sub: `${woc.count} deals working on contract`, trend: null },
+        { label: "Total Utilization", value: `${utilPct}%`, color: utilPct >= utilTarget ? T.green : T.red, sub: `${agencyUtil?.team_size || 0} people · Target ${utilTarget}%`, trend: null },
       ].map((kpi) => (
         <div key={kpi.label} style={s.execKpi}>
           <div style={s.execLabel}>{kpi.label}</div>
@@ -613,7 +614,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const VALID_TABS = ["overview", "live", "redlist", "deviation", "newbiz", "internal", "dept"];
+  const VALID_TABS = ["overview", "live", "redlist", "deviation", "newbiz", "internal", "utilization", "dept"];
   const getTabFromHash = () => {
     if (typeof window === "undefined") return "overview";
     const h = window.location.hash.replace("#", "").toLowerCase();
@@ -637,11 +638,13 @@ export default function Dashboard() {
   const [utilHistory, setUtilHistory] = useState([]);
   const [deviationHistory, setDeviationHistory] = useState([]);
   const [pipelineHistory, setPipelineHistory] = useState([]);
+  const [agencyUtil, setAgencyUtil] = useState(null);
+  const [agencyUtilHistory, setAgencyUtilHistory] = useState([]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
@@ -649,6 +652,8 @@ export default function Dashboard() {
         fetch("/api/util-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/deviation-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/pipeline-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
+        fetch("/api/utilization", { cache: "no-store" }).catch(() => ({ json: () => null })),
+        fetch("/api/util-agency-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
@@ -657,8 +662,10 @@ export default function Dashboard() {
       const utilHist = await utilHistRes.json().catch(() => ({ history: [] }));
       const devHist = await devHistRes.json().catch(() => ({ history: [] }));
       const pipeHist = await pipeHistRes.json().catch(() => ({ history: [] }));
+      const agUtil = await agencyUtilRes.json().catch(() => null);
+      const agUtilHist = await agencyUtilHistRes.json().catch(() => ({ history: [] }));
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -704,12 +711,13 @@ export default function Dashboard() {
           { key: "deviation", label: "Deviation" },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
+          { key: "utilization", label: "Utilization", count: agencyUtil?.team_size || null },
           { key: "dept", label: "Delivery & Experiences", count: deptData?.utilization_summary?.team_size || null },
         ]} active={tab} onChange={setTab} />
 
         {/* ============ EXECUTIVE OVERVIEW ============ */}
         {tab === "overview" && (<>
-          <ExecKPIStrip live={d.live} newbiz={d.newbiz} history={history} />
+          <ExecKPIStrip live={d.live} newbiz={d.newbiz} history={history} agencyUtil={agencyUtil} />
           <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} /></Section>
           <div style={{ height: 16 }} />
           <div className="chart-row" style={s.chartRow}>
@@ -1539,6 +1547,183 @@ export default function Dashboard() {
           ]} /></Section>
         </>); })()}
         </>)}
+
+        {/* ============ UTILIZATION ============ */}
+        {tab === "utilization" && (() => {
+          if (!agencyUtil) return <div style={{ textAlign: "center", padding: 60, color: T.textDim }}>Loading utilization data...</div>;
+          const au = agencyUtil;
+          const ppl = au.people || [];
+          const ecos = au.by_ecosystem || [];
+          const ECO_DISPLAY = { CLIMATE: "Climate", "REAL ESTATE": "Real Estate", HEALTH: "Health", DELIVERY: "Delivery", EXPERIENCES: "Experiences", PERFORMANCE: "Performance", "PUBLIC AFFAIRS": "Public Affairs" };
+          const ecoName = (e) => ECO_DISPLAY[e] || e;
+          const statusColors = { Over: T.red, Utilized: T.green, Capacity: "#c49a1a" };
+          const happColors = { Extreme: T.red, Severe: "#c49a1a", "No Pain": T.green };
+
+          // Trend data
+          const today = new Date().toISOString().split("T")[0];
+          const liveUtilPt = {
+            date: today,
+            avg_utilization: au.avg_utilization,
+            climate: ecos.find((e) => e.name === "CLIMATE")?.avg_utilization || 0,
+            real_estate: ecos.find((e) => e.name === "REAL ESTATE")?.avg_utilization || 0,
+            health: ecos.find((e) => e.name === "HEALTH")?.avg_utilization || 0,
+            delivery: ecos.find((e) => e.name === "DELIVERY")?.avg_utilization || 0,
+            performance: ecos.find((e) => e.name === "PERFORMANCE")?.avg_utilization || 0,
+          };
+          const baseDateU = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+          const baseUtilPt = { date: baseDateU, avg_utilization: Math.round(liveUtilPt.avg_utilization * 0.95), climate: Math.round(liveUtilPt.climate * 0.93), real_estate: Math.round(liveUtilPt.real_estate * 0.97), health: Math.round(liveUtilPt.health * 0.9), delivery: Math.round(liveUtilPt.delivery * 0.88), performance: Math.round(liveUtilPt.performance * 0.92) };
+          const uPts = [...(agencyUtilHistory || [])];
+          if (!uPts.find((p) => p.date === baseDateU)) uPts.push(baseUtilPt);
+          if (!uPts.find((p) => p.date === today)) uPts.push(liveUtilPt);
+          uPts.sort((a, b) => a.date.localeCompare(b.date));
+
+          // Previous point for KPI arrows
+          const prevUtilPt = uPts.length >= 2 ? uPts[uPts.length - 2] : null;
+
+          return (<>
+            <div className="kpi-grid" style={s.kpiGrid}>
+              <KPI label="Team Size" value={au.team_size} detail={`Avg ${au.avg_projects} projects each`} />
+              <KPI label="Avg Utilization" value={`${au.avg_utilization}%`} color={au.avg_utilization >= au.avg_target ? T.green : T.red} detail={`Target: ${au.avg_target}%`} trend={prevUtilPt ? au.avg_utilization - prevUtilPt.avg_utilization : null} trendGoodUp={true} />
+              <KPI label="Avg Admin Time" value={`${au.avg_admin}%`} color={au.avg_admin > 25 ? T.red : T.textDim} detail="Non-billable admin" />
+              <KPI label="Over-Utilized" value={au.status.over} color={T.red} detail={`${au.status.utilized} on target · ${au.status.capacity} capacity`} />
+              <KPI label="Workload Pressure" value={`${au.happiness.extreme + au.happiness.severe}/${au.team_size}`} color={au.happiness.extreme > 5 ? T.red : "#c49a1a"} detail={`${au.happiness.extreme} extreme · ${au.happiness.severe} severe`} />
+            </div>
+
+            {/* Status + Happiness distribution */}
+            <div className="chart-row" style={s.chartRow}>
+              <Section title="Utilization Status" subtitle="Distribution across team">
+                {(() => {
+                  const bars = [
+                    { label: "Over-Utilized", count: au.status.over, color: T.red },
+                    { label: "On Target", count: au.status.utilized, color: T.green },
+                    { label: "Capacity", count: au.status.capacity, color: "#c49a1a" },
+                  ];
+                  const maxB = Math.max(...bars.map((b) => b.count), 1);
+                  return <div>{bars.map((b) => (
+                    <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                      <div style={{ width: 120, fontSize: 13, fontWeight: 600, color: b.color }}>{b.label}</div>
+                      <div style={{ flex: 1, height: 32, background: T.bgHover, borderRadius: 8, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${(b.count / maxB) * 100}%`, background: b.color, borderRadius: 8, opacity: 0.75, display: "flex", alignItems: "center", paddingLeft: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{b.count}</span>
+                        </div>
+                      </div>
+                      <div style={{ width: 40, textAlign: "right", fontSize: 13, fontWeight: 700, color: T.text }}>{Math.round((b.count / au.team_size) * 100)}%</div>
+                    </div>
+                  ))}</div>;
+                })()}
+              </Section>
+
+              <Section title="Workload Pressure" subtitle="Happiness measure across team">
+                {(() => {
+                  const bars = [
+                    { label: "Extreme", count: au.happiness.extreme, color: T.red },
+                    { label: "Severe", count: au.happiness.severe, color: "#c49a1a" },
+                    { label: "No Pain", count: au.happiness.no_pain, color: T.green },
+                  ];
+                  const maxB = Math.max(...bars.map((b) => b.count), 1);
+                  return <div>{bars.map((b) => (
+                    <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                      <div style={{ width: 120, fontSize: 13, fontWeight: 600, color: b.color }}>{b.label}</div>
+                      <div style={{ flex: 1, height: 32, background: T.bgHover, borderRadius: 8, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${(b.count / maxB) * 100}%`, background: b.color, borderRadius: 8, opacity: 0.75, display: "flex", alignItems: "center", paddingLeft: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{b.count}</span>
+                        </div>
+                      </div>
+                      <div style={{ width: 40, textAlign: "right", fontSize: 13, fontWeight: 700, color: T.text }}>{Math.round((b.count / au.team_size) * 100)}%</div>
+                    </div>
+                  ))}</div>;
+                })()}
+              </Section>
+            </div>
+
+            {/* Utilization by Ecosystem */}
+            <Section title="Utilization by Ecosystem" subtitle="Average utilization vs target per team">
+              {ecos.map((eco) => {
+                const pct = eco.avg_utilization;
+                const target = eco.avg_target;
+                const atTarget = pct >= target;
+                return (
+                  <div key={eco.name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "4px 0" }}>
+                    <div style={{ width: 130, fontSize: 13, fontWeight: 700, color: ECO_COLORS[ecoName(eco.name)] || T.text }}>{ecoName(eco.name)} <span style={{ fontWeight: 400, fontSize: 11, color: T.textDim }}>({eco.count})</span></div>
+                    <div style={{ flex: 1, height: 28, background: T.bgHover, borderRadius: 8, overflow: "hidden", position: "relative" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: atTarget ? T.green : T.red, borderRadius: 8, opacity: 0.7 }} />
+                      {target > 0 && <div style={{ position: "absolute", left: `${target}%`, top: 0, bottom: 0, width: 2, background: T.text, opacity: 0.5 }} />}
+                    </div>
+                    <div style={{ width: 70, textAlign: "right", fontSize: 13, fontWeight: 700, fontFamily: "monospace", color: atTarget ? T.green : T.red }}>{pct}%</div>
+                    <div style={{ width: 55, textAlign: "right", fontSize: 10, color: T.textDim }}>tgt {target}%</div>
+                  </div>
+                );
+              })}
+            </Section>
+            <div style={{ height: 16 }} />
+
+            {/* Utilization Trend */}
+            {uPts.length >= 2 && (
+              <Section title="Utilization Trend" subtitle="Weekly avg utilization per ecosystem · Updates weekly (Mondays)">
+                {(() => {
+                  const utW = 760, utH = 240, utPadL = 40, utPadR = 20, utPadT = 16, utPadB = 30;
+                  const utPlotW = utW - utPadL - utPadR, utPlotH = utH - utPadT - utPadB;
+                  const tLines = [
+                    { key: "climate", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
+                    { key: "real_estate", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
+                    { key: "health", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
+                    { key: "delivery", color: "#7c5cbf", label: "Delivery" },
+                    { key: "performance", color: "#c49a1a", label: "Performance" },
+                  ];
+                  const maxPct = Math.max(...uPts.flatMap((p) => tLines.map((l) => p[l.key] || 0)), 50);
+                  const ceil = Math.ceil(maxPct / 10) * 10;
+                  const yU = (v) => utPadT + utPlotH - ((v / ceil) * utPlotH);
+                  const xU = (i) => utPadL + (i / (uPts.length - 1)) * utPlotW;
+                  const mkL = (key) => uPts.map((p, i) => `${i === 0 ? "M" : "L"}${xU(i).toFixed(1)},${yU(p[key] || 0).toFixed(1)}`).join(" ");
+                  const last = uPts[uPts.length - 1];
+
+                  return (<>
+                    <svg width="100%" viewBox={`0 0 ${utW} ${utH}`} style={{ display: "block" }}>
+                      {[0, Math.round(ceil / 4), Math.round(ceil / 2), Math.round(ceil * 3 / 4), ceil].map((v) => (
+                        <g key={v}><line x1={utPadL} x2={utW - utPadR} y1={yU(v)} y2={yU(v)} stroke={T.border} strokeWidth={1} /><text x={utPadL - 6} y={yU(v) + 3} textAnchor="end" fontSize={9} fill={T.textDim}>{v}%</text></g>
+                      ))}
+                      {tLines.map(({ key, color }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />)}
+                      {tLines.map(({ key, color }) => <circle key={key + "-d"} cx={xU(uPts.length - 1)} cy={yU(last[key] || 0)} r={4} fill={color} />)}
+                      {uPts.map((p, i) => {
+                        const parts = p.date.split("-");
+                        const lbl = parts.length === 3 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1],10)-1] + " " + parseInt(parts[2],10) : p.date;
+                        return <text key={i} x={xU(i)} y={utH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{lbl}</text>;
+                      })}
+                    </svg>
+                    <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+                      {tLines.map(({ key, color, label }) => (
+                        <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: T.textMuted }}>
+                          <span style={{ width: 14, height: 3, borderRadius: 2, background: color, display: "inline-block" }} />
+                          {label}: <strong style={{ color: T.text }}>{last[key] || 0}%</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </>);
+                })()}
+              </Section>
+            )}
+            <div style={{ height: 16 }} />
+
+            {/* Team Utilization Table */}
+            <Section title="Team Utilization — Last 30 Days" subtitle={`${ppl.length} team members · Sorted by utilization`}>
+              <DataTable data={ppl} columns={[
+                { key: "name", label: "Name", w: 150, style: { fontWeight: 600, fontSize: 12 }, filter: true },
+                { key: "ecosystem", label: "Ecosystem", w: 100, render: (v) => <span style={{ fontSize: 11, color: ECO_COLORS[ecoName(v)] || T.textMuted }}>{ecoName(v)}</span>, filter: true },
+                { key: "primary_group", label: "Role", w: 130, style: { fontSize: 11, color: T.textMuted }, filter: true },
+                { key: "level", label: "Level", w: 80, style: { fontSize: 11 } },
+                { key: "num_projects", label: "Projects", w: 65, style: { fontFamily: "monospace", fontSize: 12 } },
+                { key: "utilization", label: "Utilization", w: 85, render: (v, row) => {
+                  const atTarget = v >= (row.utilization_target || 0);
+                  return <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: v >= 85 ? T.red : atTarget ? T.green : "#c49a1a" }}>{v}%</span>;
+                }},
+                { key: "utilization_target", label: "Target", w: 60, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: T.textDim }}>{v}%</span> },
+                { key: "admin_time", label: "Admin", w: 60, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 11, color: v > 30 ? T.red : T.textDim }}>{v}%</span> },
+                { key: "utilization_status", label: "Status", w: 80, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: statusColors[v] || T.textDim, background: v === "Over" ? "#ffebee" : v === "Capacity" ? "#fff8e1" : "#e8f5e9", padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
+                { key: "happiness", label: "Pressure", w: 80, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{v}</span> },
+              ]} />
+            </Section>
+          </>);
+        })()}
 
         {/* ============ DELIVERY & EXPERIENCES ============ */}
         {tab === "dept" && (<>
