@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.14.2";
+const APP_VERSION = "1.14.3";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -151,7 +151,7 @@ function KPI({ label, value, detail, color, trend, trendGoodUp }) {
 // ---------------------------------------------------------------------------
 // Exec KPI Strip
 // ---------------------------------------------------------------------------
-function ExecKPIStrip({ live, newbiz, history, agencyUtil }) {
+function ExecKPIStrip({ live, newbiz, history, agencyUtil, agencyUtilHistory }) {
   const net = live.financials.total_overage - live.financials.total_investment;
   // Previous snapshot for trend arrows
   const prev = history?.length >= 2 ? history[history.length - 2] : null;
@@ -165,6 +165,10 @@ function ExecKPIStrip({ live, newbiz, history, agencyUtil }) {
   };
   const utilPct = agencyUtil?.avg_utilization || 0;
   const utilTarget = agencyUtil?.avg_target || 70;
+  // Util trend from agency util history
+  const prevUtilHist = (agencyUtilHistory || []).length > 0 ? agencyUtilHistory[agencyUtilHistory.length - 1] : null;
+  const utilDiff = prevUtilHist ? utilPct - (prevUtilHist.avg_utilization || 0) : null;
+  const utilTrend = utilDiff && Math.abs(utilDiff) >= 1 ? (() => { const up = utilDiff > 0; return <span style={{ fontSize: 10, fontWeight: 700, color: up ? T.green : T.red, marginLeft: 4 }}>{up ? "▲" : "▼"} {Math.abs(utilDiff)}%</span>; })() : null;
   return (
     <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
       {[
@@ -172,7 +176,7 @@ function ExecKPIStrip({ live, newbiz, history, agencyUtil }) {
         { label: "Burn Rate", value: `${live.financials.burn_rate_pct}%`, color: burnColor(live.financials.burn_rate_pct), sub: `${fmtK(live.financials.total_actuals)} spent`, trend: prev ? (() => { const diff = live.financials.burn_rate_pct - prev.burn_rate; if (Math.abs(diff) < 0.1) return null; const up = diff > 0; return <span style={{ fontSize: 10, fontWeight: 700, color: up ? T.red : T.green, marginLeft: 4 }}>{up ? "▲" : "▼"} {Math.abs(diff).toFixed(1)}%</span>; })() : null },
         { label: "Net Overservice", value: fmtK(net), color: net > 0 ? T.red : T.green, sub: `${live.financials.overserviced_count} projects (${fmtK(live.financials.total_investment)} invested)`, trend: trendArrow(net, prev?.net_overservice, true) },
         { label: "Weighted Pipeline", value: fmtK(newbiz.weighted_pipeline), color: T.orange, sub: `${fmtK(newbiz.total_forecast)} unweighted`, trend: trendArrow(newbiz.weighted_pipeline, prev?.weighted_pipeline, false) },
-        { label: "Total Utilization", value: `${utilPct}%`, color: utilPct >= utilTarget ? T.green : T.red, sub: `${agencyUtil?.team_size || 0} people · Target ${utilTarget}%`, trend: null },
+        { label: "Total Utilization", value: `${utilPct}%`, color: utilPct >= utilTarget ? T.green : T.red, sub: `${agencyUtil?.team_size || 0} people · Target ${utilTarget}%`, trend: utilTrend },
       ].map((kpi) => (
         <div key={kpi.label} style={s.execKpi}>
           <div style={s.execLabel}>{kpi.label}</div>
@@ -717,7 +721,7 @@ export default function Dashboard() {
 
         {/* ============ EXECUTIVE OVERVIEW ============ */}
         {tab === "overview" && (<>
-          <ExecKPIStrip live={d.live} newbiz={d.newbiz} history={history} agencyUtil={agencyUtil} />
+          <ExecKPIStrip live={d.live} newbiz={d.newbiz} history={history} agencyUtil={agencyUtil} agencyUtilHistory={agencyUtilHistory} />
           <Section title="Weekly Trends" subtitle="Live Revenue · Net Overservice · Weighted Pipeline"><TrendChart history={history} /></Section>
           <div style={{ height: 16 }} />
           <div className="chart-row" style={s.chartRow}>
@@ -1660,23 +1664,27 @@ export default function Dashboard() {
 
             {/* Billable by Ecosystem + Utilization by Level */}
             <div className="chart-row" style={s.chartRow}>
-              <Section title="Billable % by Ecosystem" subtitle="Utilization minus NB/Internal per team">
+              <Section title="Billable % by Ecosystem" subtitle="Utilization minus NB/Internal · Target = util target − 15%">
                 {ecos.map((eco) => {
                   const bill = eco.avg_billable || 0;
+                  const billTarget = Math.max(0, (eco.avg_target || 0) - 15);
+                  const atTarget = bill >= billTarget;
                   return (
                     <div key={eco.name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "4px 0" }}>
                       <div style={{ width: 130, fontSize: 13, fontWeight: 700, color: ECO_COLORS[ecoName(eco.name)] || T.text }}>{ecoName(eco.name)} <span style={{ fontWeight: 400, fontSize: 11, color: T.textDim }}>({eco.count})</span></div>
-                      <div style={{ flex: 1, height: 28, background: T.bgHover, borderRadius: 8, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${bill}%`, background: T.blue, borderRadius: 8, opacity: 0.7 }} />
+                      <div style={{ flex: 1, height: 28, background: T.bgHover, borderRadius: 8, overflow: "hidden", position: "relative" }}>
+                        <div style={{ height: "100%", width: `${bill}%`, background: atTarget ? T.blue : T.red, borderRadius: 8, opacity: 0.7 }} />
+                        {billTarget > 0 && <div style={{ position: "absolute", left: `${billTarget}%`, top: 0, bottom: 0, width: 2, background: T.text, opacity: 0.5 }} />}
                       </div>
-                      <div style={{ width: 50, textAlign: "right", fontSize: 13, fontWeight: 700, fontFamily: "monospace", color: T.blue }}>{bill}%</div>
+                      <div style={{ width: 50, textAlign: "right", fontSize: 13, fontWeight: 700, fontFamily: "monospace", color: atTarget ? T.blue : T.red }}>{bill}%</div>
+                      <div style={{ width: 45, textAlign: "right", fontSize: 10, color: T.textDim }}>tgt {billTarget}%</div>
                     </div>
                   );
                 })}
               </Section>
 
               <Section title="Utilization by Level" subtitle="Average utilization vs target per seniority level">
-                {(au.by_level || []).map((lvl) => {
+                {(au.by_level || []).filter((lvl) => lvl.name !== "Not Found" && !lvl.name.includes("EVP")).map((lvl) => {
                   const pct = lvl.avg_utilization;
                   const target = lvl.avg_target;
                   const atTarget = pct >= target;
@@ -1747,6 +1755,20 @@ export default function Dashboard() {
             )}
             <div style={{ height: 16 }} />
 
+            {/* Sabbaticals */}
+            {(au.sabbaticals || []).length > 0 && (<>
+              <Section title="Upcoming Sabbaticals" subtitle={`${au.sabbaticals.length} approved sabbaticals · Sorted by start date`}>
+                <DataTable data={au.sabbaticals} columns={[
+                  { key: "name", label: "Team Member", w: 160, style: { fontWeight: 600, fontSize: 12 } },
+                  { key: "start", label: "Start", w: 90, style: { fontFamily: "monospace", fontSize: 12 } },
+                  { key: "end", label: "End", w: 90, style: { fontFamily: "monospace", fontSize: 12 } },
+                  { key: "ecosystem", label: "Ecosystem", w: 120, render: (v) => <span style={{ fontSize: 11, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
+                  { key: "status", label: "Status", w: 120, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: v === "Approved" ? T.green : v === "Dept Head Approved" ? "#c49a1a" : T.textDim, background: v === "Approved" ? "#e8f5e9" : v === "Dept Head Approved" ? "#fff8e1" : T.bgHover, padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
+                ]} />
+              </Section>
+              <div style={{ height: 16 }} />
+            </>)}
+
             {/* Team Utilization Table */}
             <Section title="Team Utilization — Last 30 Days" subtitle={`${ppl.length} team members · Sorted by utilization`}>
               <DataTable data={ppl.map((p) => ({ ...p, billable: Math.max(0, p.utilization - p.nb_internal) }))} columns={[
@@ -1766,20 +1788,6 @@ export default function Dashboard() {
                 { key: "happiness", label: "Pressure", w: 75, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: happColors[v] || T.textDim }}>{v}</span> },
               ]} />
             </Section>
-
-            {/* Sabbaticals */}
-            {(au.sabbaticals || []).length > 0 && (<>
-              <div style={{ height: 16 }} />
-              <Section title="Upcoming Sabbaticals" subtitle={`${au.sabbaticals.length} approved sabbaticals · Sorted by start date`}>
-                <DataTable data={au.sabbaticals} columns={[
-                  { key: "name", label: "Team Member", w: 160, style: { fontWeight: 600, fontSize: 12 } },
-                  { key: "start", label: "Start", w: 90, style: { fontFamily: "monospace", fontSize: 12 } },
-                  { key: "end", label: "End", w: 90, style: { fontFamily: "monospace", fontSize: 12 } },
-                  { key: "ecosystem", label: "Ecosystem", w: 120, render: (v) => <span style={{ fontSize: 11, color: ECO_COLORS[v] || T.textMuted }}>{v}</span> },
-                  { key: "status", label: "Status", w: 120, render: (v) => <span style={{ fontSize: 10, fontWeight: 700, color: v === "Approved" ? T.green : v === "Dept Head Approved" ? "#c49a1a" : T.textDim, background: v === "Approved" ? "#e8f5e9" : v === "Dept Head Approved" ? "#fff8e1" : T.bgHover, padding: "2px 8px", borderRadius: 4 }}>{v}</span> },
-                ]} />
-              </Section>
-            </>)}
           </>);
         })()}
 
