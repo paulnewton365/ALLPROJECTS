@@ -1401,7 +1401,7 @@ export default function Dashboard() {
             <div className="kpi-grid" style={{ ...s.kpiGrid, gridTemplateColumns: "repeat(4, 1fr)" }}>
               <KPI label="Total Retainers" value={sum.total || 0} detail="Active retainer projects" />
               <KPI label="Total Retainer Value" value={fmtK(sum.total_value || 0)} color={T.text} detail="Sum of budget forecasts" />
-              <KPI label="Deviation This Month" value={fmtDev(sum.total_deviation_this_month || 0)} color={devColor(sum.total_deviation_this_month || 0)} detail="Last week's deviation across all retainers" />
+              <KPI label="Deviation This Month" value={fmtDev(sum.total_deviation_this_month || 0)} color={devColor(sum.total_deviation_this_month || 0)} detail="This month's deviation across all retainers" />
               <KPI label="Deviation Last 30 Days" value={fmtDev(sum.total_deviation_last_30 || 0)} color={devColor(sum.total_deviation_last_30 || 0)} detail="Rolling 30-day deviation" />
             </div>
 
