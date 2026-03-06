@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.14.6";
+const APP_VERSION = "1.15.0";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -618,7 +618,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const VALID_TABS = ["overview", "live", "redlist", "deviation", "newbiz", "internal", "utilization", "dept"];
+  const VALID_TABS = ["overview", "live", "redlist", "deviation", "retainers", "newbiz", "internal", "utilization", "dept"];
   const getTabFromHash = () => {
     if (typeof window === "undefined") return "overview";
     const h = window.location.hash.replace("#", "").toLowerCase();
@@ -644,11 +644,12 @@ export default function Dashboard() {
   const [pipelineHistory, setPipelineHistory] = useState([]);
   const [agencyUtil, setAgencyUtil] = useState(null);
   const [agencyUtilHistory, setAgencyUtilHistory] = useState([]);
+  const [retainerData, setRetainerData] = useState(null);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes, retainersRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
@@ -658,6 +659,7 @@ export default function Dashboard() {
         fetch("/api/pipeline-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/utilization", { cache: "no-store" }).catch(() => ({ json: () => null })),
         fetch("/api/util-agency-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
+        fetch("/api/retainers", { cache: "no-store" }).catch(() => ({ json: () => null })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
@@ -668,8 +670,9 @@ export default function Dashboard() {
       const pipeHist = await pipeHistRes.json().catch(() => ({ history: [] }));
       const agUtil = await agencyUtilRes.json().catch(() => null);
       const agUtilHist = await agencyUtilHistRes.json().catch(() => ({ history: [] }));
+      const retainers = await retainersRes.json().catch(() => null);
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setRetainerData(retainers?.error ? null : retainers); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -713,6 +716,7 @@ export default function Dashboard() {
           { key: "live", label: "Live Work", count: d.live.count },
           { key: "redlist", label: "Red List", count: d.live.projects.filter((p) => p.rag_color === "red").length },
           { key: "deviation", label: "Deviation" },
+          { key: "retainers", label: "Retainers", count: retainerData?.summary?.total || null },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
           { key: "utilization", label: "Utilization", count: agencyUtil?.team_size || null },
@@ -1344,6 +1348,151 @@ export default function Dashboard() {
                 );
               })()}
             </Section>
+          </>);
+        })()}
+
+        {/* ============ RETAINERS ============ */}
+        {tab === "retainers" && (() => {
+          const rt = retainerData;
+          const fmtDev = (v) => { const abs = Math.abs(v); const str = abs >= 1000 ? "$" + (abs / 1000).toFixed(1) + "K" : "$" + Math.round(abs); return v < 0 ? "-" + str : "+" + str; };
+          const devColor = (v) => v > 500 ? T.red : v < -500 ? T.blue : T.green;
+          const retainerEcos = ["Climate", "Real Estate", "Health", "Public Affairs"];
+
+          if (!rt) return (
+            <div style={{ padding: 40, textAlign: "center", color: T.textMuted, fontSize: 14 }}>
+              Loading retainer data... <button onClick={loadData} style={{ marginLeft: 12, ...s.accentBtn }}>Retry</button>
+            </div>
+          );
+
+          const sum = rt.summary || {};
+
+          // --- Retainer project table columns ---
+          const retainerCols = [
+            { key: "rid", label: "RID", w: 80, style: { fontFamily: "monospace", fontSize: 11, color: T.textMuted } },
+            { key: "client", label: "Client", w: 110, style: { fontWeight: 700, fontSize: 12 }, filter: true },
+            { key: "project_name", label: "Assignment Title", w: 180, style: { fontSize: 11 } },
+            { key: "rag_color", label: "RAG", w: 46, render: (v) => {
+              const c = RAG[v] || RAG.unknown;
+              return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: c.bg, color: c.text }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />{c.label}</span>;
+            }},
+            { key: "pct_complete", label: "% Booked Work Complete", w: 90, render: (v) => v != null ? <span style={{ fontSize: 12, fontWeight: 700, color: v >= 90 ? T.red : v >= 70 ? T.orange : T.green }}>{v}%</span> : <span style={{ color: T.textDim }}>—</span> },
+            { key: "budget_forecast", label: "Budget Forecast", w: 110, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{fmtK(v)}</span> },
+            { key: "deviation_this_month", label: "Deviation This Month", w: 110, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: devColor(v) }}>{fmtDev(v)}</span> },
+            { key: "sow_time_elapsed", label: "% Way Through SOW", w: 90, render: (v) => {
+              if (v == null) return <span style={{ color: T.textDim }}>—</span>;
+              const color = v >= 90 ? T.red : v >= 75 ? T.orange : v >= 50 ? T.yellow : T.green;
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ flex: 1, height: 6, background: T.bgHover, borderRadius: 4, overflow: "hidden", minWidth: 40 }}>
+                    <div style={{ width: `${Math.min(v, 100)}%`, height: "100%", background: color, borderRadius: 4 }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color, minWidth: 32 }}>{v}%</span>
+                </div>
+              );
+            }},
+            { key: "actuals", label: "Actuals", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: T.textMuted }}>{fmtK(v)}</span> },
+            { key: "overage", label: "Overage", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: v > 0 ? 700 : 400, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{fmtK(v)}</span> },
+            { key: "oop", label: "OOP", w: 80, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: T.textMuted }}>{v ? fmtK(v) : "—"}</span> },
+            { key: "contracts_total", label: "Contracts Total", w: 100, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{v ? fmtK(v) : "—"}</span> },
+          ];
+
+          return (<>
+            {/* Summary KPIs */}
+            <div className="kpi-grid" style={{ ...s.kpiGrid, gridTemplateColumns: "repeat(4, 1fr)" }}>
+              <KPI label="Total Retainers" value={sum.total || 0} detail="Active retainer projects" />
+              <KPI label="Total Retainer Value" value={fmtK(sum.total_value || 0)} color={T.text} detail="Sum of budget forecasts" />
+              <KPI label="Deviation This Month" value={fmtDev(sum.total_deviation_this_month || 0)} color={devColor(sum.total_deviation_this_month || 0)} detail="Last week's deviation across all retainers" />
+              <KPI label="Deviation Last 30 Days" value={fmtDev(sum.total_deviation_last_30 || 0)} color={devColor(sum.total_deviation_last_30 || 0)} detail="Rolling 30-day deviation" />
+            </div>
+
+            {/* Top 5 panels */}
+            <div className="chart-row" style={{ ...s.chartRow, marginBottom: 20 }}>
+              {/* Top 5 by Budget */}
+              <Section title="Top 5 Retainers by Budget Value">
+                {(rt.top_by_budget || []).length === 0 ? (
+                  <div style={{ color: T.textMuted, fontSize: 13, padding: 16 }}>No retainer data available.</div>
+                ) : (
+                  <div>
+                    {(rt.top_by_budget || []).map((p, i) => {
+                      const maxBudget = rt.top_by_budget[0]?.budget_forecast || 1;
+                      const pct = (p.budget_forecast / maxBudget) * 100;
+                      const ecoColor = ECO_COLORS[p.ecosystem] || T.textMuted;
+                      return (
+                        <div key={p.rid || i} style={{ marginBottom: 14 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                            <div>
+                              <span style={{ fontWeight: 700, fontSize: 13 }}>{p.client}</span>
+                              <span style={{ fontSize: 11, color: T.textMuted, marginLeft: 8 }}>{p.project_name}</span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontSize: 11, color: ecoColor, fontWeight: 600 }}>{p.ecosystem}</span>
+                              <span style={{ fontFamily: "monospace", fontWeight: 800, fontSize: 14 }}>{fmtK(p.budget_forecast)}</span>
+                            </div>
+                          </div>
+                          <div style={{ height: 8, background: T.bgHover, borderRadius: 4, overflow: "hidden" }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: ecoColor, borderRadius: 4, opacity: 0.8 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Section>
+
+              {/* Top 5 by Overage */}
+              <Section title="Top 5 Retainers by Overage">
+                {(rt.top_by_overage || []).length === 0 ? (
+                  <div style={{ color: T.green, fontSize: 13, padding: 16 }}>✓ No retainers currently in overage.</div>
+                ) : (
+                  <div>
+                    {(rt.top_by_overage || []).map((p, i) => {
+                      const maxOv = rt.top_by_overage[0]?.overage || 1;
+                      const pct = (p.overage / maxOv) * 100;
+                      const ragC = RAG[p.rag_color] || RAG.unknown;
+                      return (
+                        <div key={p.rid || i} style={{ marginBottom: 14 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                            <div>
+                              <span style={{ fontWeight: 700, fontSize: 13 }}>{p.client}</span>
+                              <span style={{ fontSize: 11, color: T.textMuted, marginLeft: 8 }}>{p.project_name}</span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "1px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: ragC.bg, color: ragC.text }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: ragC.dot }} />{ragC.label}</span>
+                              <span style={{ fontFamily: "monospace", fontWeight: 800, fontSize: 14, color: T.red }}>{fmtK(p.overage)}</span>
+                            </div>
+                          </div>
+                          <div style={{ height: 8, background: "#ffebee", borderRadius: 4, overflow: "hidden" }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: T.red, borderRadius: 4, opacity: 0.7 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Section>
+            </div>
+
+            {/* Per-ecosystem retainer tables */}
+            {retainerEcos.map((eco) => {
+              const projects = (rt.by_ecosystem || {})[eco] || [];
+              const ecoColor = ECO_COLORS[eco] || T.textMuted;
+              const ecoTotal = projects.reduce((s, p) => s + (p.budget_forecast || 0), 0);
+              const ecoOverage = projects.reduce((s, p) => s + (p.overage || 0), 0);
+              return (
+                <Section
+                  key={eco}
+                  title={<span>{eco} <span style={{ fontWeight: 400, fontSize: 13, color: T.textMuted }}>Retainers</span></span>}
+                  subtitle={`${projects.length} retainer${projects.length !== 1 ? "s" : ""} · ${fmtK(ecoTotal)} total value · ${ecoOverage > 0 ? fmtK(ecoOverage) + " overage" : "No overage"}`}
+                  style={{ borderTop: `3px solid ${ecoColor}`, marginBottom: 20 }}
+                >
+                  {projects.length === 0 ? (
+                    <div style={{ color: T.textMuted, fontSize: 13, padding: "12px 0" }}>No retainer projects found for {eco}.</div>
+                  ) : (
+                    <DataTable data={projects} columns={retainerCols} />
+                  )}
+                </Section>
+              );
+            })}
           </>);
         })()}
 
