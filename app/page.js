@@ -1375,10 +1375,8 @@ export default function Dashboard() {
               const c = RAG[v] || RAG.unknown;
               return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: c.bg, color: c.text }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />{c.label}</span>;
             }},
-            { key: "pct_complete", label: "% Booked Work Complete", w: 90, render: (v) => v != null ? <span style={{ fontSize: 12, fontWeight: 700, color: v >= 90 ? T.red : v >= 70 ? T.orange : T.green }}>{v}%</span> : <span style={{ color: T.textDim }}>—</span> },
             { key: "budget_forecast", label: "Budget Forecast", w: 110, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{fmtK(v)}</span> },
-            { key: "deviation_this_month", label: "Deviation This Month", w: 110, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: devColor(v) }}>{fmtDev(v)}</span> },
-            { key: "sow_time_elapsed", label: "% Way Through SOW", w: 90, render: (v) => {
+            { key: "sow_time_elapsed", label: "% Through Term", w: 110, render: (v) => {
               if (v == null) return <span style={{ color: T.textDim }}>—</span>;
               const color = v >= 90 ? T.red : v >= 75 ? T.orange : v >= 50 ? T.yellow : T.green;
               return (
@@ -1390,10 +1388,12 @@ export default function Dashboard() {
                 </div>
               );
             }},
+            { key: "deviation_this_month", label: "Deviation This Month", w: 110, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: devColor(v) }}>{fmtDev(v)}</span> },
+            { key: "deviation_last_30", label: "Deviation Last 30 Days", w: 120, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: devColor(v) }}>{fmtDev(v)}</span> },
             { key: "actuals", label: "Actuals", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: T.textMuted }}>{fmtK(v)}</span> },
-            { key: "overage", label: "Overage", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: v > 0 ? 700 : 400, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{fmtK(v)}</span> },
             { key: "oop", label: "OOP", w: 80, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, color: T.textMuted }}>{v ? fmtK(v) : "—"}</span> },
-            { key: "contracts_total", label: "Contracts Total", w: 100, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{v ? fmtK(v) : "—"}</span> },
+            { key: "overage", label: "Overage", w: 90, render: (v) => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: v > 0 ? 700 : 400, color: v > 0 ? T.red : v < 0 ? T.blue : T.textDim }}>{fmtK(v)}</span> },
+            { key: "pct_complete", label: "% Booked Work Complete", w: 90, render: (v) => v != null ? <span style={{ fontSize: 12, fontWeight: 700, color: v >= 90 ? T.red : v >= 70 ? T.orange : T.green }}>{v}%</span> : <span style={{ color: T.textDim }}>—</span> },
           ];
 
           return (<>
