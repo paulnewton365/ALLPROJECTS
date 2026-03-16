@@ -1721,11 +1721,12 @@ export default function Dashboard() {
             climate: ecos.find((e) => e.name === "CLIMATE")?.avg_utilization || 0,
             real_estate: ecos.find((e) => e.name === "REAL ESTATE")?.avg_utilization || 0,
             health: ecos.find((e) => e.name === "HEALTH")?.avg_utilization || 0,
+            experiences: ecos.find((e) => e.name === "EXPERIENCES")?.avg_utilization || 0,
             delivery: ecos.find((e) => e.name === "DELIVERY")?.avg_utilization || 0,
             performance: ecos.find((e) => e.name === "PERFORMANCE")?.avg_utilization || 0,
           };
           const baseDateU = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
-          const baseUtilPt = { date: baseDateU, avg_utilization: Math.round(liveUtilPt.avg_utilization * 0.95), climate: Math.round(liveUtilPt.climate * 0.93), real_estate: Math.round(liveUtilPt.real_estate * 0.97), health: Math.round(liveUtilPt.health * 0.9), delivery: Math.round(liveUtilPt.delivery * 0.88), performance: Math.round(liveUtilPt.performance * 0.92) };
+          const baseUtilPt = { date: baseDateU, avg_utilization: Math.round(liveUtilPt.avg_utilization * 0.95), climate: Math.round(liveUtilPt.climate * 0.93), real_estate: Math.round(liveUtilPt.real_estate * 0.97), health: Math.round(liveUtilPt.health * 0.9), experiences: Math.round(liveUtilPt.experiences * 0.91), delivery: Math.round(liveUtilPt.delivery * 0.88), performance: Math.round(liveUtilPt.performance * 0.92) };
           const uPts = [...(agencyUtilHistory || [])];
           if (!uPts.find((p) => p.date === baseDateU)) uPts.push(baseUtilPt);
           if (!uPts.find((p) => p.date === today)) uPts.push(liveUtilPt);
@@ -1864,6 +1865,7 @@ export default function Dashboard() {
                     { key: "climate", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
                     { key: "real_estate", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
                     { key: "health", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
+                    { key: "experiences", color: T.teal, label: "Experiences" },
                     { key: "delivery", color: "#7c5cbf", label: "Delivery" },
                     { key: "performance", color: "#c49a1a", label: "Performance" },
                   ];
@@ -1883,8 +1885,8 @@ export default function Dashboard() {
                       {/* Agency target line */}
                       <line x1={utPadL} x2={utW - utPadR} y1={yU(agencyTarget)} y2={yU(agencyTarget)} stroke={T.text} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.5} />
                       <text x={utW - utPadR + 4} y={yU(agencyTarget) + 3} fontSize={9} fill={T.text} fontWeight={600} opacity={0.6}>Target {agencyTarget}%</text>
-                      {tLines.map(({ key, color }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />)}
-                      {tLines.map(({ key, color }) => <circle key={key + "-d"} cx={xU(uPts.length - 1)} cy={yU(last[key] || 0)} r={4} fill={color} />)}
+                      {tLines.map(({ key, color }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={1.2} strokeLinejoin="round" />)}
+                      {tLines.map(({ key, color }) => <circle key={key + "-d"} cx={xU(uPts.length - 1)} cy={yU(last[key] || 0)} r={3} fill={color} />)}
                       {uPts.map((p, i) => {
                         const parts = p.date.split("-");
                         const lbl = parts.length === 3 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1],10)-1] + " " + parseInt(parts[2],10) : p.date;
