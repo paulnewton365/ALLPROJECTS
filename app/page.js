@@ -225,7 +225,7 @@ function TrendChart({ history }) {
 
   // 2+ points — full-width line chart
   const H = 200, PX = 50, PY = 20;
-  const allVals = history.flatMap((h) => metrics.map((m) => h[m.key] || 0));
+  const allVals = history.reduce((acc, h) => { metrics.forEach((m) => acc.push(h[m.key] || 0)); return acc; }, []);
   const minV = Math.min(...allVals, 0);
   const maxV = Math.max(...allVals, 1);
   const range = maxV - minV || 1;
@@ -401,8 +401,8 @@ function BubbleMatrix({ matrix, billable, totalProjects, revenueMode }) {
   if (!ecoIdxs.length) return <div style={{ color: T.textDim, padding: 20 }}>No billable ecosystem data</div>;
   const rtTotals = matrix.requestTypes.map((rt, ci) => ({ name: rt, idx: ci, total: ecoIdxs.reduce((sum, e) => sum + matrix.cells[e.idx][ci].count, 0), budget: ecoIdxs.reduce((sum, e) => sum + (matrix.cells[e.idx][ci].budget || 0), 0) })).sort((a, b) => b.total - a.total);
   const topRT = rtTotals.filter((r) => r.total > 0).slice(0, 10);
-  const maxCount = Math.max(...ecoIdxs.flatMap((e) => topRT.map((rt) => matrix.cells[e.idx][rt.idx].count)), 1);
-  const maxBudget = Math.max(...ecoIdxs.flatMap((e) => topRT.map((rt) => matrix.cells[e.idx][rt.idx].budget)), 1);
+  const maxCount = Math.max(...ecoIdxs.reduce((acc, e) => { topRT.forEach((rt) => acc.push(matrix.cells[e.idx][rt.idx].count)); return acc; }, []), 1);
+  const maxBudget = Math.max(...ecoIdxs.reduce((acc, e) => { topRT.forEach((rt) => acc.push(matrix.cells[e.idx][rt.idx].budget)); return acc; }, []), 1);
   const projTotal = totalProjects || ecoIdxs.reduce((sum, e) => sum + topRT.reduce((s, rt) => s + matrix.cells[e.idx][rt.idx].count, 0), 0) || 1;
   const budgetTotal = ecoIdxs.reduce((sum, e) => sum + topRT.reduce((s, rt) => s + (matrix.cells[e.idx][rt.idx].budget || 0), 0), 0) || 1;
   return (
@@ -1167,7 +1167,7 @@ export default function Dashboard() {
                     { key: "total_ed", color: "#7c5cbf", label: "Experiences & Delivery" },
                     { key: "total_perf", color: "#c49a1a", label: "Performance" },
                   ];
-                  const allVals = trendPts.flatMap((p) => lines.map((l) => p[l.key] || 0));
+                  const allVals = trendPts.reduce((acc, p) => { lines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []);
                   const maxAbs = Math.max(Math.abs(Math.min(...allVals)), Math.abs(Math.max(...allVals)), 1000);
                   const ceil = Math.ceil(maxAbs / 1000) * 1000;
                   const yT = (v) => tPadT + tPlotH / 2 - (v / ceil) * (tPlotH / 2);
@@ -1560,7 +1560,7 @@ export default function Dashboard() {
               { key: "real_estate", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
               { key: "health", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
             ];
-            const allVals = pts.flatMap((p) => lines.map((l) => p[l.key] || 0));
+            const allVals = pts.reduce((acc, p) => { lines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []);
             const maxVal = Math.max(...allVals, 1);
             const ceil = Math.ceil(maxVal / 50000) * 50000 || 50000;
             const yP = (v) => pPadT + pPlotH - ((v / ceil) * pPlotH);
