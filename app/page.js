@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.5";
+const APP_VERSION = "1.15.6";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1862,12 +1862,12 @@ export default function Dashboard() {
                   const utW = 760, utH = 240, utPadL = 40, utPadR = 60, utPadT = 16, utPadB = 30;
                   const utPlotW = utW - utPadL - utPadR, utPlotH = utH - utPadT - utPadB;
                   const tLines = [
-                    { key: "climate",      color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate",      width: 2.5 },
-                    { key: "real_estate",  color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate",  width: 1.5 },
-                    { key: "health",       color: ECO_COLORS.Health || "#c44e3b",  label: "Health",       width: 2.5 },
-                    { key: "experiences",  color: "#d97a1a",                        label: "Experiences",  width: 1.5 },
-                    { key: "delivery",     color: "#7c5cbf",                        label: "Delivery",     width: 2.5 },
-                    { key: "performance",  color: "#c49a1a",                        label: "Performance",  width: 1.5 },
+                    { key: "climate",      color: "#2a8f4e", label: "Climate" },
+                    { key: "real_estate",  color: "#3b73c4", label: "Real Estate" },
+                    { key: "health",       color: "#c44e3b", label: "Health" },
+                    { key: "experiences",  color: "#e8750a", label: "Experiences" },
+                    { key: "delivery",     color: "#9333ea", label: "Delivery" },
+                    { key: "performance",  color: "#0891b2", label: "Performance" },
                   ];
                   const maxPct = Math.max(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []), 50);
                   const minPct = Math.min(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []).filter(v => v > 0));
@@ -1886,7 +1886,7 @@ export default function Dashboard() {
                       ))}
                       <line x1={utPadL} x2={utW - utPadR} y1={yU(agencyTarget)} y2={yU(agencyTarget)} stroke={T.text} strokeWidth={1} strokeDasharray="6,4" opacity={0.3} />
                       <text x={utW - utPadR + 4} y={yU(agencyTarget) + 3} fontSize={9} fill={T.textDim} opacity={0.6}>Target {agencyTarget}%</text>
-                      {tLines.map(({ key, color, width }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={width} strokeLinejoin="round" />)}
+                      {tLines.map(({ key, color }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />)}
                       {tLines.map(({ key, color }) => <circle key={key + "-d"} cx={xU(uPts.length - 1)} cy={yU(last[key] || 0)} r={3} fill={color} />)}
                       {uPts.map((p, i) => {
                         const parts = p.date.split("-");
@@ -1895,9 +1895,9 @@ export default function Dashboard() {
                       })}
                     </svg>
                     <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
-                      {tLines.map(({ key, color, label, width }) => (
+                      {tLines.map(({ key, color, label }) => (
                         <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: T.textMuted }}>
-                          <svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke={color} strokeWidth={width} /></svg>
+                          <svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke={color} strokeWidth={2} /></svg>
                           {label}: <strong style={{ color }}>{last[key] || 0}%</strong>
                         </span>
                       ))}
