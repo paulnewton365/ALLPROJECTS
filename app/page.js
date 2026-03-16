@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.2";
+const APP_VERSION = "1.15.4";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1859,48 +1859,62 @@ export default function Dashboard() {
             {uPts.length >= 2 && (
               <Section title="Clientable Utilization Trend" subtitle="Weekly avg utilization per ecosystem · Updates weekly (Mondays)">
                 {(() => {
-                  const utW = 760, utH = 240, utPadL = 40, utPadR = 60, utPadT = 16, utPadB = 30;
+                  const utW = 760, utH = 240, utPadL = 40, utPadR = 120, utPadT = 16, utPadB = 30;
                   const utPlotW = utW - utPadL - utPadR, utPlotH = utH - utPadT - utPadB;
                   const tLines = [
-                    { key: "climate", color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate" },
-                    { key: "real_estate", color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate" },
-                    { key: "health", color: ECO_COLORS.Health || "#c44e3b", label: "Health" },
-                    { key: "experiences", color: T.teal, label: "Experiences" },
-                    { key: "delivery", color: "#7c5cbf", label: "Delivery" },
-                    { key: "performance", color: "#c49a1a", label: "Performance" },
+                    { key: "climate",      color: ECO_COLORS.Climate || "#2a8f4e", label: "Climate",      dash: "none",    width: 2 },
+                    { key: "real_estate",  color: ECO_COLORS["Real Estate"] || "#3b73c4", label: "Real Estate",  dash: "8,3",    width: 2 },
+                    { key: "health",       color: ECO_COLORS.Health || "#c44e3b",  label: "Health",       dash: "none",    width: 2 },
+                    { key: "experiences",  color: "#d97a1a",                        label: "Experiences",  dash: "4,3",    width: 2 },
+                    { key: "delivery",     color: "#7c5cbf",                        label: "Delivery",     dash: "8,3",    width: 2 },
+                    { key: "performance",  color: "#c49a1a",                        label: "Performance",  dash: "4,3",    width: 2 },
                   ];
                   const maxPct = Math.max(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []), 50);
+                  const minPct = Math.min(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []).filter(v => v > 0));
+                  const floor = Math.max(0, Math.floor((minPct - 20) / 10) * 10);
                   const ceil = Math.ceil(maxPct / 10) * 10;
-                  const yU = (v) => utPadT + utPlotH - ((v / ceil) * utPlotH);
+                  const yU = (v) => utPadT + utPlotH - (((v - floor) / (ceil - floor)) * utPlotH);
                   const xU = (i) => utPadL + (i / (uPts.length - 1)) * utPlotW;
                   const mkL = (key) => uPts.map((p, i) => `${i === 0 ? "M" : "L"}${xU(i).toFixed(1)},${yU(p[key] || 0).toFixed(1)}`).join(" ");
                   const last = uPts[uPts.length - 1];
                   const agencyTarget = au.avg_target || 70;
 
+                  // Sort lines by final value descending to offset labels and avoid collisions
+                  const sortedByVal = [...tLines].sort((a, b) => (last[b.key] || 0) - (last[a.key] || 0));
+                  const LABEL_H = 14;
+                  const labelPositions = {};
+                  sortedByVal.forEach((l, i) => {
+                    const rawY = yU(last[l.key] || 0);
+                    const minY = utPadT + i * LABEL_H;
+                    labelPositions[l.key] = Math.max(rawY, minY);
+                  });
+
                   return (<>
                     <svg width="100%" viewBox={`0 0 ${utW} ${utH}`} style={{ display: "block" }}>
-                      {[0, Math.round(ceil / 4), Math.round(ceil / 2), Math.round(ceil * 3 / 4), ceil].map((v) => (
+                      {[floor, Math.round(floor + (ceil-floor)/4), Math.round(floor + (ceil-floor)/2), Math.round(floor + (ceil-floor)*3/4), ceil].map((v) => (
                         <g key={v}><line x1={utPadL} x2={utW - utPadR} y1={yU(v)} y2={yU(v)} stroke={T.border} strokeWidth={1} /><text x={utPadL - 6} y={yU(v) + 3} textAnchor="end" fontSize={9} fill={T.textDim}>{v}%</text></g>
                       ))}
                       {/* Agency target line */}
-                      <line x1={utPadL} x2={utW - utPadR} y1={yU(agencyTarget)} y2={yU(agencyTarget)} stroke={T.text} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.5} />
-                      <text x={utW - utPadR + 4} y={yU(agencyTarget) + 3} fontSize={9} fill={T.text} fontWeight={600} opacity={0.6}>Target {agencyTarget}%</text>
-                      {tLines.map(({ key, color }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={1.2} strokeLinejoin="round" />)}
-                      {tLines.map(({ key, color }) => <circle key={key + "-d"} cx={xU(uPts.length - 1)} cy={yU(last[key] || 0)} r={3} fill={color} />)}
+                      <line x1={utPadL} x2={utW - utPadR} y1={yU(agencyTarget)} y2={yU(agencyTarget)} stroke={T.text} strokeWidth={1} strokeDasharray="6,4" opacity={0.3} />
+                      {tLines.map(({ key, color, dash, width }) => <path key={key} d={mkL(key)} fill="none" stroke={color} strokeWidth={width} strokeDasharray={dash === "none" ? undefined : dash} strokeLinejoin="round" />)}
+                      {/* End dots + right-side labels */}
+                      {tLines.map(({ key, color, label }) => {
+                        const cy = yU(last[key] || 0);
+                        const ly = labelPositions[key];
+                        return (
+                          <g key={key + "-label"}>
+                            <circle cx={xU(uPts.length - 1)} cy={cy} r={3} fill={color} />
+                            {Math.abs(cy - ly) > 2 && <line x1={xU(uPts.length - 1) + 4} y1={cy} x2={xU(uPts.length - 1) + 8} y2={ly} stroke={color} strokeWidth={0.8} opacity={0.5} />}
+                            <text x={xU(uPts.length - 1) + 10} y={ly + 4} fontSize={10} fill={color} fontWeight={700}>{label} {last[key] || 0}%</text>
+                          </g>
+                        );
+                      })}
                       {uPts.map((p, i) => {
                         const parts = p.date.split("-");
                         const lbl = parts.length === 3 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1],10)-1] + " " + parseInt(parts[2],10) : p.date;
                         return <text key={i} x={xU(i)} y={utH - 4} textAnchor="middle" fontSize={9} fill={T.textDim}>{lbl}</text>;
                       })}
                     </svg>
-                    <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
-                      {tLines.map(({ key, color, label }) => (
-                        <span key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: T.textMuted }}>
-                          <span style={{ width: 14, height: 3, borderRadius: 2, background: color, display: "inline-block" }} />
-                          {label}: <strong style={{ color: T.text }}>{last[key] || 0}%</strong>
-                        </span>
-                      ))}
-                    </div>
                   </>);
                 })()}
               </Section>
