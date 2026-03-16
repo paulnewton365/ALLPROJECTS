@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.0";
+const APP_VERSION = "1.15.1";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1869,7 +1869,7 @@ export default function Dashboard() {
                     { key: "delivery", color: "#7c5cbf", label: "Delivery" },
                     { key: "performance", color: "#c49a1a", label: "Performance" },
                   ];
-                  const maxPct = Math.max(...uPts.flatMap((p) => tLines.map((l) => p[l.key] || 0)), 50);
+                  const maxPct = Math.max(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []), 50);
                   const ceil = Math.ceil(maxPct / 10) * 10;
                   const yU = (v) => utPadT + utPlotH - ((v / ceil) * utPlotH);
                   const xU = (i) => utPadL + (i / (uPts.length - 1)) * utPlotW;
