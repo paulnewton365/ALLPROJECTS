@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.6";
+const APP_VERSION = "1.15.7";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -720,7 +720,6 @@ export default function Dashboard() {
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
           { key: "utilization", label: "Utilization", count: agencyUtil?.team_size || null },
-          { key: "dept", label: "Delivery & Experiences", count: deptData?.utilization_summary?.team_size || null },
         ]} active={tab} onChange={setTab} />
 
         {/* ============ EXECUTIVE OVERVIEW ============ */}
@@ -1871,7 +1870,7 @@ export default function Dashboard() {
                   ];
                   const maxPct = Math.max(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []), 50);
                   const minPct = Math.min(...uPts.reduce((acc, p) => { tLines.forEach((l) => acc.push(p[l.key] || 0)); return acc; }, []).filter(v => v > 0));
-                  const floor = Math.max(0, Math.floor((minPct - 20) / 10) * 10);
+                  const floor = Math.max(0, Math.floor((minPct - 10) / 10) * 10);
                   const ceil = Math.ceil(maxPct / 10) * 10;
                   const yU = (v) => utPadT + utPlotH - (((v - floor) / (ceil - floor)) * utPlotH);
                   const xU = (i) => utPadL + (i / (uPts.length - 1)) * utPlotW;
