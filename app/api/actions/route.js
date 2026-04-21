@@ -25,6 +25,9 @@ import {
 import {
   getCachedBriefing, saveBriefing, hashBriefingInput, isCacheFresh,
 } from "../../../lib/actions-briefing";
+import {
+  getActionsTrend, appendActionsTrend,
+} from "../../../lib/actions-trend";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,6 +41,20 @@ async function generateBriefing(summary, heads) {
   if (!apiKey) return null;
 
   const byType = summary.by_type || {};
+
+  // Describe each trigger on a top-impact project with its own $ amount so the
+  // model cannot blur "$X overage" with "$Y deviation" into "$X+Y deviation".
+  function describeTrigger(t) {
+    if (t.type === "deviation_over")  return `+$${Math.round(t.label_amount).toLocaleString()} last-30-day OVERSERVICING (time deviation)`;
+    if (t.type === "deviation_under") return `$${Math.round(t.label_amount).toLocaleString()} last-30-day UNDERSERVICING (time deviation)`;
+    if (t.type === "overage_pct")     return `$${Math.round(t.label_amount).toLocaleString()} BUDGET OVERAGE at ${t.pct_of_budget}% of budget (forecast-to-complete)`;
+    if (t.type === "ready_to_close")  return "100% complete, still open (needs closing)";
+    if (t.type === "no_tracking")     return "no time tracking (data hygiene)";
+    if (t.type === "missing_budget")  return "missing pipeline budget (data hygiene)";
+    if (t.type === "stale_stage")     return `${t.days_old}d in system with no change (stale pipeline)`;
+    return t.type;
+  }
+
   const topImpact = heads
     .reduce((acc, h) => {
       [...h.live, ...h.pipeline].forEach((p) => acc.push({ head: h.name, ...p }));
@@ -45,27 +62,36 @@ async function generateBriefing(summary, heads) {
     }, [])
     .sort((a, b) => b.total_dollar - a.total_dollar)
     .slice(0, 5)
-    .map((p) => `- ${p.head}: ${p.rid} ${p.project.client} / ${p.project.project_name} — $${Math.round(p.total_dollar).toLocaleString()}, ${p.triggers.length} trigger(s), oldest ${p.max_days_open}d`);
+    .map((p) => {
+      const lines = p.triggers.map((t) => `    * ${describeTrigger(t)} (open ${t.days_open}d)`);
+      return `- ${p.head}: ${p.rid} ${p.project.client} / ${p.project.project_name}\n${lines.join("\n")}`;
+    });
 
   const teamLines = heads
     .filter((h) => h.total > 0)
-    .map((h) => `- ${h.name} (${h.lead}): ${h.total} actions (${h.live_count} live / ${h.pipeline_count} pipeline), $${Math.round(h.total_dollar_impact).toLocaleString()} impact, ${h.aging_count} aging 4w+`);
+    .map((h) => `- ${h.name} (${h.lead}): ${h.total} actions (${h.live_count} live / ${h.pipeline_count} pipeline), ${h.aging_count} aging 4w+`);
 
   const hygieneCount = (byType.no_tracking || 0) + (byType.missing_budget || 0) + (byType.ready_to_close || 0) + (byType.stale_stage || 0);
   const financialCount = (byType.deviation_over || 0) + (byType.deviation_under || 0) + (byType.overage_pct || 0);
 
   const prompt = `You are writing the opening paragraph of an executive dashboard section that surfaces week-over-week actions arising from an all-projects review at Antenna Group, an integrated marketing & communications agency.
 
+TERMINOLOGY RULES — READ CAREFULLY, DO NOT CONFLATE:
+"Overage" and "deviation" are DIFFERENT concepts. You must never use one word to describe the other.
+  • OVERAGE / BUDGET OVERAGE = dollar amount the project is forecast to exceed its budget by at completion (a forecast-to-complete figure). Always refer to this as "overage" or "budget overage". Never call it a "deviation".
+  • DEVIATION / OVERSERVICING / UNDERSERVICING = dollars' worth of time-tracking gap over the last 30 days (logged time minus booked time). Always refer to this as "deviation", "overservicing", or "underservicing". Never call it an "overage".
+If a project has both triggers, describe them separately with their own dollar amounts. Do not sum them or use one word for both.
+
 CURRENT ACTIONS SNAPSHOT:
 - Total active actions: ${summary.total} (${summary.live} live work, ${summary.pipeline} pipeline)
 - New today: ${summary.new_today} · Oldest open: ${summary.oldest_days_open} days · Aging (4w+): ${summary.aging_count}
-- Financial triggers (deviation over/under, overage): ${financialCount}
+- Financial triggers (deviation + overage combined count): ${financialCount}
 - Data-hygiene triggers (no tracking, missing budget, ready-to-close, stale): ${hygieneCount}
 
 BY TRIGGER TYPE:
-- Overservicing (deviation +>$3.5K): ${byType.deviation_over || 0}
-- Underservicing (deviation <-$5K): ${byType.deviation_under || 0}
-- Overage >10% of budget: ${byType.overage_pct || 0}
+- Overservicing (30d deviation +>$3.5K): ${byType.deviation_over || 0}
+- Underservicing (30d deviation <-$5K): ${byType.deviation_under || 0}
+- Budget overage >10% of budget: ${byType.overage_pct || 0}
 - Ready to close (100% complete, still open): ${byType.ready_to_close || 0}
 - No time tracking: ${byType.no_tracking || 0}
 - Missing pipeline budget: ${byType.missing_budget || 0}
@@ -74,10 +100,10 @@ BY TRIGGER TYPE:
 BY TEAM:
 ${teamLines.join("\n") || "- None"}
 
-TOP-IMPACT PROJECTS:
+TOP-IMPACT PROJECTS (each trigger shown separately — DO NOT merge them):
 ${topImpact.join("\n") || "- None"}
 
-Write a single paragraph of no more than 150 words that gives the reader a snapshot of the current state of actions AND the cleanliness of our data (are the hygiene triggers high? low? trending in a bad direction?). Lead with the most important signal. Be specific with numbers. Call out which team has the heaviest load if it's lopsided. If data-hygiene issues are dominant, say that; if it's a financial week, say that. Do not use markdown, bullets, or headers — prose only. Do not restate every number from above; pick the ones that matter. No fluff openings like "This week" or "In summary". CFO / CEO audience.`;
+Write a single paragraph of no more than 150 words that gives the reader a snapshot of the current state of actions AND the cleanliness of our data. Lead with the most important signal. Be specific with numbers. Call out which team has the heaviest load if it's lopsided. If data-hygiene issues are dominant, say so; if it's a financial week, say so. When you reference a project by name, name the specific trigger type correctly — "X has a $Y deviation" for overservicing/underservicing, "X has a $Y budget overage" for forecast overage. Never combine the two into a single number. Do not use markdown, bullets, or headers — prose only. No fluff openings like "This week" or "In summary". CFO / CEO audience.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -195,6 +221,32 @@ export async function GET(request) {
           briefing_generated_at = cached.generated_at;
         }
       }
+    }
+
+    // 6. Trend bootstrap — if the trend blob is empty, seed two flat points
+    //    (today + 7 days ago) so the chart is visible immediately. The Monday
+    //    cron then adds real data points going forward. Only runs when empty.
+    try {
+      const trend = await getActionsTrend();
+      if (!trend || trend.length === 0) {
+        const seedEntry = {
+          total: summary.total,
+          live: summary.live,
+          pipeline: summary.pipeline,
+          deviation_over:  by_type.deviation_over  || 0,
+          deviation_under: by_type.deviation_under || 0,
+          overage_pct:     by_type.overage_pct     || 0,
+          ready_to_close:  by_type.ready_to_close  || 0,
+          no_tracking:     by_type.no_tracking     || 0,
+          missing_budget:  by_type.missing_budget  || 0,
+          stale_stage:     by_type.stale_stage     || 0,
+        };
+        const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        await appendActionsTrend({ ...seedEntry, date: lastWeek, seeded: true });
+        await appendActionsTrend({ ...seedEntry, date: today });
+      }
+    } catch (err) {
+      console.error("Trend bootstrap error:", err.message);
     }
 
     return Response.json(
