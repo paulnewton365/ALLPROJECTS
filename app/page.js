@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.7";
+const APP_VERSION = "1.15.8";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -618,7 +618,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const VALID_TABS = ["overview", "live", "redlist", "deviation", "retainers", "newbiz", "internal", "utilization", "dept"];
+  const VALID_TABS = ["overview", "live", "redlist", "deviation", "retainers", "actions", "newbiz", "internal", "utilization", "dept"];
   const getTabFromHash = () => {
     if (typeof window === "undefined") return "overview";
     const h = window.location.hash.replace("#", "").toLowerCase();
@@ -645,11 +645,12 @@ export default function Dashboard() {
   const [agencyUtil, setAgencyUtil] = useState(null);
   const [agencyUtilHistory, setAgencyUtilHistory] = useState([]);
   const [retainerData, setRetainerData] = useState(null);
+  const [actionsData, setActionsData] = useState(null);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes, retainersRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes, retainersRes, actionsRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
@@ -660,6 +661,7 @@ export default function Dashboard() {
         fetch("/api/utilization", { cache: "no-store" }).catch(() => ({ json: () => null })),
         fetch("/api/util-agency-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/retainers", { cache: "no-store" }).catch(() => ({ json: () => null })),
+        fetch("/api/actions", { cache: "no-store" }).catch(() => ({ json: () => null })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
@@ -671,8 +673,9 @@ export default function Dashboard() {
       const agUtil = await agencyUtilRes.json().catch(() => null);
       const agUtilHist = await agencyUtilHistRes.json().catch(() => ({ history: [] }));
       const retainers = await retainersRes.json().catch(() => null);
+      const actions = await actionsRes.json().catch(() => null);
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setRetainerData(retainers?.error ? null : retainers); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setRetainerData(retainers?.error ? null : retainers); setActionsData(actions?.error ? null : actions); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -717,6 +720,7 @@ export default function Dashboard() {
           { key: "redlist", label: "Red List", count: d.live.projects.filter((p) => p.rag_color === "red").length },
           { key: "deviation", label: "Deviation" },
           { key: "retainers", label: "Retainers", count: retainerData?.summary?.total || null },
+          { key: "actions", label: "Actions", count: actionsData?.summary?.total || null },
           { key: "newbiz", label: "New Business", count: d.newbiz.count },
           { key: "internal", label: "Internal Projects", count: d.internal.projects.filter((p) => p.category !== "Internal Admin Time").length },
           { key: "utilization", label: "Utilization", count: agencyUtil?.team_size || null },
@@ -1492,6 +1496,162 @@ export default function Dashboard() {
                 </Section>
               );
             })}
+          </>);
+        })()}
+
+        {/* ============ ACTIONS ============ */}
+        {tab === "actions" && (() => {
+          if (!actionsData) return <div style={{ textAlign: "center", padding: 60, color: T.textDim }}>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>Loading actions...</div>
+            <div style={{ fontSize: 12 }}>If this persists, the /api/actions endpoint may not be deployed yet.</div>
+          </div>;
+
+          const heads = actionsData.heads || [];
+          const summary = actionsData.summary || {};
+          const byType = summary.by_type || {};
+
+          // ----- trigger metadata (labels, colors, descriptions) -----
+          const TRIGGER_META = {
+            deviation_over:  { label: "Overservicing",   color: T.red,       bg: "#ffebee" },
+            deviation_under: { label: "Underservicing",  color: T.blue,      bg: "#e3f2fd" },
+            overage_pct:     { label: "Overage",         color: T.red,       bg: "#ffebee" },
+            ready_to_close:  { label: "Ready to close",  color: T.textMuted, bg: "#f5f5f5" },
+            no_tracking:    { label: "No time tracking", color: T.orange,    bg: "#fff3e0" },
+            missing_budget:  { label: "Missing budget",  color: T.orange,    bg: "#fff3e0" },
+            stale_stage:     { label: "Stale",           color: T.textMuted, bg: "#f5f5f5" },
+          };
+
+          function triggerDetail(t) {
+            if (t.type === "deviation_over")  return `+${fmtK(t.label_amount)} · last 30d`;
+            if (t.type === "deviation_under") return `${fmtK(t.label_amount)} · last 30d`;
+            if (t.type === "overage_pct")     return `${t.pct_of_budget}% · ${fmtK(t.label_amount)}`;
+            if (t.type === "stale_stage")     return `${t.days_old}d in system`;
+            return null;
+          }
+
+          function ActionChip({ trig }) {
+            const m = TRIGGER_META[trig.type] || { label: trig.type, color: T.text, bg: T.bgHover };
+            const detail = triggerDetail(trig);
+            return (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: m.bg, color: m.color, padding: "3px 9px", borderRadius: 12, fontSize: 11, fontWeight: 600, border: `1px solid ${m.color}22` }}>
+                <span>{m.label}</span>
+                {detail && <span style={{ opacity: 0.85, fontWeight: 500 }}>{detail}</span>}
+                <span style={{ opacity: 0.55, fontWeight: 500, fontSize: 10, borderLeft: `1px solid ${m.color}33`, paddingLeft: 6 }}>
+                  {trig.days_open === 0 ? "new today" : `${trig.days_open}d open`}
+                </span>
+              </span>
+            );
+          }
+
+          function ProjectRow({ proj, isPipeline }) {
+            const owner = isPipeline ? (proj.project.assignment || "Unassigned") : (proj.project.pm || "Unassigned");
+            const ownerLabel = isPipeline ? "Assignment" : "PM/PROD";
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: "monospace", color: T.textDim, fontSize: 11 }}>{proj.rid}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{proj.project.client}</span>
+                  <span style={{ color: T.textMuted, fontSize: 12, flex: 1, minWidth: 120 }}>{proj.project.project_name}</span>
+                  {proj.project.rag_color && proj.project.rag_color !== "unknown" && (
+                    <span style={{ fontSize: 10, fontWeight: 700, background: RAG[proj.project.rag_color].bg, color: RAG[proj.project.rag_color].text, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{RAG[proj.project.rag_color].label}</span>
+                  )}
+                  <span style={{ fontSize: 11, color: T.textDim }}>
+                    <span style={{ fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.4, fontSize: 10 }}>{ownerLabel}:</span>{" "}
+                    <span style={{ fontWeight: 600, color: T.text }}>{owner}</span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {proj.triggers.map((t) => <ActionChip key={t.id} trig={t} />)}
+                </div>
+              </div>
+            );
+          }
+
+          return (<>
+            {/* Summary strip */}
+            <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 16 }}>
+              <KPI label="Total Actions"      value={summary.total || 0}           color={T.text} />
+              <KPI label="Live Work"          value={summary.live || 0}            color={T.blue} />
+              <KPI label="Pipeline"           value={summary.pipeline || 0}        color={T.purple} />
+              <KPI label="New Today"          value={summary.new_today || 0}       color={T.green} />
+              <KPI label="Oldest Open"        value={(summary.oldest_days_open || 0) + "d"} color={T.orange} />
+            </div>
+
+            {/* Trigger-type summary bar */}
+            {summary.total > 0 && (
+              <Section title="Action Mix" subtitle="Breakdown by trigger type across the whole agency">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "4px 0" }}>
+                  {Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => {
+                    const m = TRIGGER_META[type] || { label: type, color: T.text, bg: T.bgHover };
+                    return (
+                      <div key={type} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: m.bg, color: m.color, padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, border: `1px solid ${m.color}22` }}>
+                        <span>{m.label}</span>
+                        <span style={{ background: "rgba(0,0,0,0.08)", padding: "1px 7px", borderRadius: 8, fontSize: 11 }}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
+
+            <div style={{ height: 16 }} />
+
+            {/* Per-dept-head cards */}
+            {heads.length === 0 || summary.total === 0 ? (
+              <Section title="All clear" subtitle="No actions currently triggered">
+                <div style={{ padding: 24, color: T.textDim, fontSize: 13, textAlign: "center" }}>
+                  No projects currently meet any trigger thresholds. Refresh to re-evaluate.
+                </div>
+              </Section>
+            ) : (
+              heads.map((head) => {
+                if (head.total === 0) {
+                  return (
+                    <div key={head.name} style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 8, padding: "14px 18px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{head.name}</div>
+                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{head.ecosystems.join(" · ")}</div>
+                      </div>
+                      <div style={{ fontSize: 12, color: T.green, fontWeight: 600 }}>✓ No actions</div>
+                    </div>
+                  );
+                }
+                return (
+                  <Section
+                    key={head.name}
+                    title={head.name}
+                    subtitle={`${head.ecosystems.join(" · ")} · ${head.total} action${head.total === 1 ? "" : "s"} · ${fmtK(head.total_dollar_impact)} total impact`}
+                  >
+                    {head.live.length > 0 && (
+                      <div style={{ marginBottom: head.pipeline.length > 0 ? 18 : 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: T.textMuted, marginBottom: 4, paddingBottom: 4, borderBottom: `2px solid ${T.border}` }}>
+                          Live Work · {head.live_count} action{head.live_count === 1 ? "" : "s"}
+                        </div>
+                        {head.live.map((proj) => <ProjectRow key={proj.rid} proj={proj} isPipeline={false} />)}
+                      </div>
+                    )}
+                    {head.pipeline.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: T.textMuted, marginBottom: 4, paddingBottom: 4, borderBottom: `2px solid ${T.border}` }}>
+                          Pipeline · {head.pipeline_count} action{head.pipeline_count === 1 ? "" : "s"}
+                        </div>
+                        {head.pipeline.map((proj) => <ProjectRow key={proj.rid} proj={proj} isPipeline={true} />)}
+                      </div>
+                    )}
+                  </Section>
+                );
+              })
+            )}
+
+            {actionsData.history_error && (
+              <div style={{ marginTop: 16, padding: 10, background: "#fff3e0", color: T.orange, fontSize: 11, borderRadius: 4 }}>
+                Note: action history storage unavailable — days-open counters may reset until resolved. ({actionsData.history_error})
+              </div>
+            )}
+
+            <div style={{ textAlign: "right", fontSize: 10, color: T.textDim, marginTop: 12 }}>
+              Generated {actionsData.generated_at ? new Date(actionsData.generated_at).toLocaleString() : "-"}
+            </div>
           </>);
         })()}
 
