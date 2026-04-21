@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.13";
+const APP_VERSION = "1.15.14";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1677,11 +1677,26 @@ export default function Dashboard() {
             {/* Headline briefing paragraph */}
             {actionsData.briefing && (
               <div style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderLeft: `4px solid #c8f549`, borderRadius: 8, padding: "16px 20px", marginBottom: 18 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, color: T.textMuted, marginBottom: 6 }}>Weekly Briefing</div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6, gap: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, color: T.textMuted }}>Weekly Briefing</div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/actions?refresh=1", { cache: "no-store" });
+                        const fresh = await res.json();
+                        if (fresh && !fresh.error) setActionsData(fresh);
+                      } catch (e) { console.error(e); }
+                    }}
+                    style={{ background: "transparent", border: `1px solid ${T.border}`, color: T.textMuted, fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 4, cursor: "pointer", letterSpacing: 0.3 }}
+                    title="Regenerate the briefing with the latest data">
+                    ↻ Refresh
+                  </button>
+                </div>
                 <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text }}>{actionsData.briefing}</div>
                 {actionsData.briefing_generated_at && (
                   <div style={{ fontSize: 10, color: T.textDim, marginTop: 8 }}>
-                    Refreshed {new Date(actionsData.briefing_generated_at).toLocaleString()} · regenerates when data changes or every 24h
+                    {actionsData.briefing_from_cache ? "Cached from" : "Refreshed"} {new Date(actionsData.briefing_generated_at).toLocaleString()}
+                    {actionsData.briefing_from_cache && <span> · click Refresh to regenerate</span>}
                   </div>
                 )}
               </div>

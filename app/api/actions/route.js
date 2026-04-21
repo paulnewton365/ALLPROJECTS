@@ -190,7 +190,13 @@ export async function GET(request) {
     // 5. Briefing (cached)
     let briefing = null;
     let briefing_generated_at = null;
+    let briefing_from_cache = false;
+    // Incrementing this string invalidates every cached briefing on the next
+    // request — bump when the prompt changes or a data pipeline fix means
+    // cached briefings would be factually stale.
+    const BRIEFING_SCHEMA = "v3-col-fix";
     const briefingInput = {
+      schema: BRIEFING_SCHEMA,
       total: summary.total,
       by_type: summary.by_type,
       aging_count,
@@ -203,6 +209,7 @@ export async function GET(request) {
       if (!forceRefresh && isCacheFresh(cached, dataHash)) {
         briefing = cached.briefing;
         briefing_generated_at = cached.generated_at;
+        briefing_from_cache = true;
       } else {
         const fresh = await generateBriefing(summary, heads);
         if (fresh) {
@@ -219,6 +226,7 @@ export async function GET(request) {
           // AI unavailable — fall back to stale cache rather than show nothing
           briefing = cached.briefing;
           briefing_generated_at = cached.generated_at;
+          briefing_from_cache = true;
         }
       }
     }
@@ -255,6 +263,7 @@ export async function GET(request) {
         heads,
         briefing,
         briefing_generated_at,
+        briefing_from_cache,
         report_url: REPORT_URL,
         generated_at: new Date().toISOString(),
         history_error: historyError,
