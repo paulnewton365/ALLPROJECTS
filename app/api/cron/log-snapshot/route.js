@@ -3,6 +3,8 @@ const { fetchSnapshot } = require("../../../../lib/smartsheet");
 const { appendDeviationHistory } = require("../../../../lib/deviation-history");
 const { appendPipelineHistory } = require("../../../../lib/pipeline-history");
 const { appendUtilAgencyHistory } = require("../../../../lib/util-agency-history");
+const { appendActionsTrend } = require("../../../../lib/actions-trend");
+const { computeActionSummaryForCron } = require("../../../../lib/actions-core");
 
 const BASE_URL = "https://api.smartsheet.com/2.0";
 async function ssApiRequest(endpoint) {
@@ -116,7 +118,14 @@ export async function GET(request) {
       }
     } catch (e) { console.error("Agency util snapshot error:", e.message); }
 
-    return Response.json({ success: true, logged: entry, dev_logged: devEntry, pipe_logged: pipeEntry, util_logged: utilEntry, total_entries: history.length });
+    // Actions snapshot (weekly trend line)
+    let actionsEntry = null;
+    try {
+      actionsEntry = await computeActionSummaryForCron();
+      await appendActionsTrend(actionsEntry);
+    } catch (e) { console.error("Actions snapshot error:", e.message); }
+
+    return Response.json({ success: true, logged: entry, dev_logged: devEntry, pipe_logged: pipeEntry, util_logged: utilEntry, actions_logged: actionsEntry, total_entries: history.length });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }

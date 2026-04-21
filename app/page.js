@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.8";
+const APP_VERSION = "1.15.10";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -646,11 +646,13 @@ export default function Dashboard() {
   const [agencyUtilHistory, setAgencyUtilHistory] = useState([]);
   const [retainerData, setRetainerData] = useState(null);
   const [actionsData, setActionsData] = useState(null);
+  const [actionsTrend, setActionsTrend] = useState([]);
+  const [collapsedPanels, setCollapsedPanels] = useState({});
 
   async function loadData() {
     setLoading(true);
     try {
-      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes, retainersRes, actionsRes] = await Promise.all([
+      const [snapRes, histRes, deptRes, deptHistRes, utilHistRes, devHistRes, pipeHistRes, agencyUtilRes, agencyUtilHistRes, retainersRes, actionsRes, actionsTrendRes] = await Promise.all([
         fetch("/api/snapshot", { cache: "no-store" }),
         fetch("/api/history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/dept-health", { cache: "no-store" }).catch(() => ({ json: () => null })),
@@ -662,6 +664,7 @@ export default function Dashboard() {
         fetch("/api/util-agency-history", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
         fetch("/api/retainers", { cache: "no-store" }).catch(() => ({ json: () => null })),
         fetch("/api/actions", { cache: "no-store" }).catch(() => ({ json: () => null })),
+        fetch("/api/actions-trend", { cache: "no-store" }).catch(() => ({ json: () => ({ history: [] }) })),
       ]);
       const snap = await snapRes.json();
       const hist = await histRes.json();
@@ -674,8 +677,9 @@ export default function Dashboard() {
       const agUtilHist = await agencyUtilHistRes.json().catch(() => ({ history: [] }));
       const retainers = await retainersRes.json().catch(() => null);
       const actions = await actionsRes.json().catch(() => null);
+      const actTrend = await actionsTrendRes.json().catch(() => ({ history: [] }));
       if (snap.error) throw new Error(snap.error);
-      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setRetainerData(retainers?.error ? null : retainers); setActionsData(actions?.error ? null : actions); setError(null);
+      setData(snap); setHistory(hist.history || []); setDeptData(dept?.error ? null : dept); setDeptHistory(deptHist.history || []); setUtilHistory(utilHist.history || []); setDeviationHistory(devHist.history || []); setPipelineHistory(pipeHist.history || []); setAgencyUtil(agUtil?.error ? null : agUtil); setAgencyUtilHistory(agUtilHist.history || []); setRetainerData(retainers?.error ? null : retainers); setActionsData(actions?.error ? null : actions); setActionsTrend(actTrend.history || []); setError(null);
       // Auto-seed: log first data point if history is empty
       if (!hist.history?.length) {
         fetch("/api/history", { method: "POST" })
@@ -1509,16 +1513,18 @@ export default function Dashboard() {
           const heads = actionsData.heads || [];
           const summary = actionsData.summary || {};
           const byType = summary.by_type || {};
+          const visibleHeads = heads.filter((h) => h.total > 0);
+          const agingThreshold = summary.aging_threshold_days || 28;
 
-          // ----- trigger metadata (labels, colors, descriptions) -----
+          // ----- trigger metadata (labels + colors) -----
           const TRIGGER_META = {
-            deviation_over:  { label: "Overservicing",   color: T.red,       bg: "#ffebee" },
-            deviation_under: { label: "Underservicing",  color: T.blue,      bg: "#e3f2fd" },
-            overage_pct:     { label: "Overage",         color: T.red,       bg: "#ffebee" },
-            ready_to_close:  { label: "Ready to close",  color: T.textMuted, bg: "#f5f5f5" },
-            no_tracking:    { label: "No time tracking", color: T.orange,    bg: "#fff3e0" },
-            missing_budget:  { label: "Missing budget",  color: T.orange,    bg: "#fff3e0" },
-            stale_stage:     { label: "Stale",           color: T.textMuted, bg: "#f5f5f5" },
+            deviation_over:  { label: "Overservicing",    color: T.red,       bg: "#ffebee" },
+            deviation_under: { label: "Underservicing",   color: T.blue,      bg: "#e3f2fd" },
+            overage_pct:     { label: "Overage",          color: T.red,       bg: "#ffebee" },
+            ready_to_close:  { label: "Ready to close",   color: T.textMuted, bg: "#f5f5f5" },
+            no_tracking:    { label: "No time tracking",  color: T.orange,    bg: "#fff3e0" },
+            missing_budget:  { label: "Missing budget",   color: T.orange,    bg: "#fff3e0" },
+            stale_stage:     { label: "Stale in pipeline",color: T.textMuted, bg: "#f5f5f5" },
           };
 
           function triggerDetail(t) {
@@ -1532,33 +1538,48 @@ export default function Dashboard() {
           function ActionChip({ trig }) {
             const m = TRIGGER_META[trig.type] || { label: trig.type, color: T.text, bg: T.bgHover };
             const detail = triggerDetail(trig);
+            const aging = trig.aging;
             return (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: m.bg, color: m.color, padding: "3px 9px", borderRadius: 12, fontSize: 11, fontWeight: 600, border: `1px solid ${m.color}22` }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: m.bg, color: m.color, padding: "3px 9px", borderRadius: 12, fontSize: 11, fontWeight: 600, border: `1px solid ${aging ? "#c93c3c" : m.color + "22"}`, boxShadow: aging ? "0 0 0 1px #c93c3c33" : "none" }}>
                 <span>{m.label}</span>
                 {detail && <span style={{ opacity: 0.85, fontWeight: 500 }}>{detail}</span>}
                 <span style={{ opacity: 0.55, fontWeight: 500, fontSize: 10, borderLeft: `1px solid ${m.color}33`, paddingLeft: 6 }}>
                   {trig.days_open === 0 ? "new today" : `${trig.days_open}d open`}
                 </span>
+                {aging && <span title={`Open ${agingThreshold}+ days without change`} style={{ background: "#c93c3c", color: "#fff", fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>4w+</span>}
+              </span>
+            );
+          }
+
+          function OwnerChip({ label, value }) {
+            if (!value) return null;
+            return (
+              <span style={{ fontSize: 11, color: T.textDim, whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.4, fontSize: 10 }}>{label}:</span>{" "}
+                <span style={{ fontWeight: 600, color: T.text }}>{value}</span>
               </span>
             );
           }
 
           function ProjectRow({ proj, isPipeline }) {
-            const owner = isPipeline ? (proj.project.assignment || "Unassigned") : (proj.project.pm || "Unassigned");
-            const ownerLabel = isPipeline ? "Assignment" : "PM/PROD";
+            const p = proj.project;
+            const pmValue = p.pm || null;
+            const asgValue = p.assignment || null;
+            const actionOwner = p.action_owner || null;
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontFamily: "monospace", color: T.textDim, fontSize: 11 }}>{proj.rid}</span>
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>{proj.project.client}</span>
-                  <span style={{ color: T.textMuted, fontSize: 12, flex: 1, minWidth: 120 }}>{proj.project.project_name}</span>
-                  {proj.project.rag_color && proj.project.rag_color !== "unknown" && (
-                    <span style={{ fontSize: 10, fontWeight: 700, background: RAG[proj.project.rag_color].bg, color: RAG[proj.project.rag_color].text, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{RAG[proj.project.rag_color].label}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{p.client}</span>
+                  <span style={{ color: T.textMuted, fontSize: 12, flex: 1, minWidth: 120 }}>{p.project_name}</span>
+                  {p.rag_color && p.rag_color !== "unknown" && (
+                    <span style={{ fontSize: 10, fontWeight: 700, background: RAG[p.rag_color].bg, color: RAG[p.rag_color].text, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{RAG[p.rag_color].label}</span>
                   )}
-                  <span style={{ fontSize: 11, color: T.textDim }}>
-                    <span style={{ fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.4, fontSize: 10 }}>{ownerLabel}:</span>{" "}
-                    <span style={{ fontWeight: 600, color: T.text }}>{owner}</span>
-                  </span>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+                    {!isPipeline && <OwnerChip label="PM/PROD" value={pmValue || "Unassigned"} />}
+                    {isPipeline && <OwnerChip label="Assignment" value={asgValue || "Unassigned"} />}
+                    <OwnerChip label="Action Owner" value={actionOwner} />
+                  </div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {proj.triggers.map((t) => <ActionChip key={t.id} trig={t} />)}
@@ -1567,15 +1588,116 @@ export default function Dashboard() {
             );
           }
 
+          function toggleCollapse(key) {
+            setCollapsedPanels((prev) => ({ ...prev, [key]: !prev[key] }));
+          }
+
+          // ----- Mini trend chart (weekly volume) -----
+          function ActionTrendChart({ hist }) {
+            if (!hist || hist.length === 0) {
+              return (
+                <div style={{ color: T.textDim, padding: 20, textAlign: "center", fontSize: 12 }}>
+                  Weekly snapshots begin with the next Monday refresh (04:00 UTC).
+                </div>
+              );
+            }
+            if (hist.length === 1) {
+              const s = hist[0];
+              return (
+                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                  <div style={{ padding: "10px 16px", background: T.bgHover, borderRadius: 8, border: `1px solid ${T.border}`, borderLeft: `4px solid ${T.text}` }}>
+                    <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 2 }}>This week</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: T.text }}>{s.total}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: T.textDim }}>Snapshot from {s.date}. Second data point arrives next Monday to form a trend line.</div>
+                </div>
+              );
+            }
+            const H = 160, PX = 40, PY = 15, W = 900;
+            const series = [
+              { key: "total",    label: "Total",    color: T.text },
+              { key: "live",     label: "Live",     color: T.blue },
+              { key: "pipeline", label: "Pipeline", color: T.purple || "#7a3fb3" },
+            ];
+            const allVals = hist.reduce((acc, h) => { series.forEach((s) => acc.push(h[s.key] || 0)); return acc; }, []);
+            const minV = 0;
+            const maxV = Math.max(...allVals, 1);
+            const range = maxV - minV || 1;
+            const yScale = (v) => PY + (H - PY * 2) * (1 - (v - minV) / range);
+            const xStep = hist.length > 1 ? (W - PX * 2) / (hist.length - 1) : 0;
+            return (
+              <div>
+                <div style={{ overflowX: "auto" }}>
+                  <svg width="100%" viewBox={`0 0 ${W} ${H + 30}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+                    {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+                      const y = PY + (H - PY * 2) * (1 - f);
+                      const val = minV + range * f;
+                      return <g key={f}><line x1={PX} x2={W - PX} y1={y} y2={y} stroke={T.border} strokeWidth={0.5} /><text x={PX - 6} y={y + 4} textAnchor="end" fontSize={9} fill={T.textDim}>{Math.round(val)}</text></g>;
+                    })}
+                    {series.map((s) => {
+                      const points = hist.map((h, i) => `${PX + i * xStep},${yScale(h[s.key] || 0)}`).join(" ");
+                      return <polyline key={s.key} points={points} fill="none" stroke={s.color} strokeWidth={2.5} />;
+                    })}
+                    {series.map((s) => hist.map((h, i) => (
+                      <circle key={`${s.key}-${i}`} cx={PX + i * xStep} cy={yScale(h[s.key] || 0)} r={3.5} fill={s.color} />
+                    )))}
+                    {hist.map((h, i) => {
+                      if (hist.length > 10 && i % Math.ceil(hist.length / 10) !== 0 && i !== hist.length - 1) return null;
+                      return <text key={i} x={PX + i * xStep} y={H + 12} textAnchor="middle" fontSize={9} fill={T.textDim}>{String(h.date).slice(5)}</text>;
+                    })}
+                  </svg>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                  <div style={{ display: "flex", gap: 16 }}>
+                    {series.map((s) => <span key={s.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: T.textMuted }}><span style={{ width: 12, height: 3, background: s.color, borderRadius: 2 }} />{s.label}</span>)}
+                  </div>
+                  <div style={{ fontSize: 10, color: T.textDim }}>Weekly · next snapshot Monday 04:00 UTC</div>
+                </div>
+              </div>
+            );
+          }
+
+          // ---------- Render ----------
           return (<>
-            {/* Summary strip */}
-            <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 16 }}>
-              <KPI label="Total Actions"      value={summary.total || 0}           color={T.text} />
-              <KPI label="Live Work"          value={summary.live || 0}            color={T.blue} />
-              <KPI label="Pipeline"           value={summary.pipeline || 0}        color={T.purple} />
-              <KPI label="New Today"          value={summary.new_today || 0}       color={T.green} />
-              <KPI label="Oldest Open"        value={(summary.oldest_days_open || 0) + "d"} color={T.orange} />
+            {/* Top bar: Smartsheet link + refresh briefing + generated-at */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+              <div style={{ fontSize: 11, color: T.textDim }}>
+                Actions surface from the All Projects review · evaluated live against Smartsheet
+              </div>
+              <a href={actionsData.report_url || "#"} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.text, color: T.bg, padding: "7px 14px", borderRadius: 6, textDecoration: "none", fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>
+                Open All Projects sheet →
+              </a>
             </div>
+
+            {/* Headline briefing paragraph */}
+            {actionsData.briefing && (
+              <div style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderLeft: `4px solid #c8f549`, borderRadius: 8, padding: "16px 20px", marginBottom: 18 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, color: T.textMuted, marginBottom: 6 }}>Weekly Briefing</div>
+                <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text }}>{actionsData.briefing}</div>
+                {actionsData.briefing_generated_at && (
+                  <div style={{ fontSize: 10, color: T.textDim, marginTop: 8 }}>
+                    Refreshed {new Date(actionsData.briefing_generated_at).toLocaleString()} · regenerates when data changes or every 24h
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* KPI strip */}
+            <div className="exec-kpi-strip" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 16 }}>
+              <KPI label="Total Actions"       value={summary.total || 0}     color={T.text} />
+              <KPI label="Live Work"           value={summary.live || 0}      color={T.blue} />
+              <KPI label="Pipeline"            value={summary.pipeline || 0}  color={T.purple || "#7a3fb3"} />
+              <KPI label="New Today"           value={summary.new_today || 0} color={T.green} />
+              <KPI label={`Aging (${agingThreshold}d+)`} value={summary.aging_count || 0} color={(summary.aging_count || 0) > 0 ? "#c93c3c" : T.textDim} />
+            </div>
+
+            {/* Trend line */}
+            <Section title="Action Volume Trend" subtitle="Weekly snapshots of open actions across the agency">
+              <ActionTrendChart hist={actionsTrend || []} />
+            </Section>
+
+            <div style={{ height: 18 }} />
 
             {/* Trigger-type summary bar */}
             {summary.total > 0 && (
@@ -1594,51 +1716,60 @@ export default function Dashboard() {
               </Section>
             )}
 
-            <div style={{ height: 16 }} />
+            <div style={{ height: 24 }} />
 
-            {/* Per-dept-head cards */}
-            {heads.length === 0 || summary.total === 0 ? (
+            {/* Per-team panels — hidden entirely when zero */}
+            {visibleHeads.length === 0 ? (
               <Section title="All clear" subtitle="No actions currently triggered">
                 <div style={{ padding: 24, color: T.textDim, fontSize: 13, textAlign: "center" }}>
-                  No projects currently meet any trigger thresholds. Refresh to re-evaluate.
+                  No projects meet any trigger thresholds right now. Refresh to re-evaluate.
                 </div>
               </Section>
             ) : (
-              heads.map((head) => {
-                if (head.total === 0) {
-                  return (
-                    <div key={head.name} style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 8, padding: "14px 18px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{head.name}</div>
-                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{head.ecosystems.join(" · ")}</div>
-                      </div>
-                      <div style={{ fontSize: 12, color: T.green, fontWeight: 600 }}>✓ No actions</div>
-                    </div>
-                  );
-                }
+              visibleHeads.map((head) => {
+                const isCollapsed = !!collapsedPanels[head.key];
+                const hasAging = (head.aging_count || 0) > 0;
                 return (
-                  <Section
-                    key={head.name}
-                    title={head.name}
-                    subtitle={`${head.ecosystems.join(" · ")} · ${head.total} action${head.total === 1 ? "" : "s"} · ${fmtK(head.total_dollar_impact)} total impact`}
-                  >
-                    {head.live.length > 0 && (
-                      <div style={{ marginBottom: head.pipeline.length > 0 ? 18 : 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: T.textMuted, marginBottom: 4, paddingBottom: 4, borderBottom: `2px solid ${T.border}` }}>
-                          Live Work · {head.live_count} action{head.live_count === 1 ? "" : "s"}
+                  <div key={head.key} style={{ background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 10, marginBottom: 24, overflow: "hidden" }}>
+                    {/* Panel header (clickable to toggle) */}
+                    <div onClick={() => toggleCollapse(head.key)}
+                      style={{ cursor: "pointer", padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, background: isCollapsed ? T.bgHover : "transparent", borderBottom: isCollapsed ? "none" : `1px solid ${T.border}`, userSelect: "none" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 800, fontSize: 17, letterSpacing: -0.2 }}>{head.name}</span>
+                          {head.delivery && <span style={{ fontSize: 10, fontWeight: 700, background: "#e3f2fd", color: T.blue, padding: "2px 7px", borderRadius: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Active Support</span>}
+                          {hasAging && <span style={{ fontSize: 10, fontWeight: 800, background: "#c93c3c", color: "#fff", padding: "2px 7px", borderRadius: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>{head.aging_count} aging</span>}
                         </div>
-                        {head.live.map((proj) => <ProjectRow key={proj.rid} proj={proj} isPipeline={false} />)}
+                        <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
+                          <span style={{ fontWeight: 600, color: T.text }}>{head.lead}</span>
+                          {head.covering && <span style={{ fontStyle: "italic", color: T.textDim }}> · covering in lieu of team lead</span>}
+                          <span style={{ color: T.textDim }}> · {head.total} action{head.total === 1 ? "" : "s"} ({head.live_count} live / {head.pipeline_count} pipeline) · {fmtK(head.total_dollar_impact)} impact</span>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 18, color: T.textDim, transition: "transform 0.15s", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+                    </div>
+
+                    {!isCollapsed && (
+                      <div style={{ padding: "8px 20px 16px" }}>
+                        {head.live.length > 0 && (
+                          <div style={{ marginBottom: head.pipeline.length > 0 ? 18 : 0 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: T.textMuted, marginBottom: 4, paddingBottom: 4, borderBottom: `2px solid ${T.border}` }}>
+                              Live Work · {head.live_count} action{head.live_count === 1 ? "" : "s"}
+                            </div>
+                            {head.live.map((proj) => <ProjectRow key={proj.rid} proj={proj} isPipeline={false} />)}
+                          </div>
+                        )}
+                        {head.pipeline.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: T.textMuted, marginBottom: 4, paddingBottom: 4, borderBottom: `2px solid ${T.border}` }}>
+                              Pipeline · {head.pipeline_count} action{head.pipeline_count === 1 ? "" : "s"}
+                            </div>
+                            {head.pipeline.map((proj) => <ProjectRow key={proj.rid} proj={proj} isPipeline={true} />)}
+                          </div>
+                        )}
                       </div>
                     )}
-                    {head.pipeline.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: T.textMuted, marginBottom: 4, paddingBottom: 4, borderBottom: `2px solid ${T.border}` }}>
-                          Pipeline · {head.pipeline_count} action{head.pipeline_count === 1 ? "" : "s"}
-                        </div>
-                        {head.pipeline.map((proj) => <ProjectRow key={proj.rid} proj={proj} isPipeline={true} />)}
-                      </div>
-                    )}
-                  </Section>
+                  </div>
                 );
               })
             )}
@@ -1651,6 +1782,10 @@ export default function Dashboard() {
 
             <div style={{ textAlign: "right", fontSize: 10, color: T.textDim, marginTop: 12 }}>
               Generated {actionsData.generated_at ? new Date(actionsData.generated_at).toLocaleString() : "-"}
+              {summary.overage_only_dropped > 0 && <span> · {summary.overage_only_dropped} project{summary.overage_only_dropped === 1 ? "" : "s"} hidden (overage-only)</span>}
+              {summary.dedup && summary.dedup.duplicate_count > 0 && (
+                <span title={`Duplicate RIDs: ${summary.dedup.duplicate_rids.join(", ")}`}> · {summary.dedup.duplicate_count} duplicate RID{summary.dedup.duplicate_count === 1 ? "" : "s"} merged</span>
+              )}
             </div>
           </>);
         })()}

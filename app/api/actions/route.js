@@ -1,380 +1,148 @@
 /**
- * Actions API
+ * Actions API (v1.15.9)
  *
- * Pulls the All Projects report (default 1172654530711428), evaluates trigger
- * rules against every row, routes each action to a department head based on
- * Owning Ecosystem, and returns actions grouped by head. Also records first_seen
- * / last_seen per action via lib/actions-history so the UI can show "days open".
+ * Returns everything the Actions tab needs in one call:
+ *   - heads:  per-team panels (Climate & PA, Real Estate, Health, HOWL/Exp,
+ *             Performance, Delivery, + Unassigned if present)
+ *   - summary: total / live / pipeline / by_type / new_today / oldest / aging
+ *   - briefing: cached AI headline paragraph (<= 150 words)
+ *   - report_url: deep link to the all-projects Smartsheet report
  *
- * Triggers:
- *   Live (RID starts with R):
- *     deviation_over   Last 30 Deviation > +$3,500
- *     deviation_under  Last 30 Deviation < -$5,000
- *     overage_pct      Overage > 10% of Budget Forecast
- *     ready_to_close   % Complete >= 100
- *     no_tracking      Actuals explicitly "No Tracking"
+ * Filter: projects whose ONLY trigger is overage_pct are dropped entirely.
+ * All other triggers remain (including overage_pct when it coexists with others).
  *
- *   Pipeline (RID starts with NB):
- *     missing_budget   Budget Forecast = 0/blank
- *     no_tracking      Actuals = 0/blank/"No Tracking"
- *     stale_stage      Row createdAt older than 100 days
+ * Query params:
+ *   ?refresh=1   Bust the briefing cache and regenerate immediately
  */
 
 import {
-  getActionsHistory,
-  saveActionsHistory,
-  reconcileActions,
-  daysBetween,
+  fetchProjects, evaluateTriggers, applyOverageOnlyFilter, groupByTeam,
+  REPORT_URL, AGING_ACTION_DAYS,
+} from "../../../lib/actions-core";
+import {
+  getActionsHistory, saveActionsHistory, reconcileActions, daysBetween,
 } from "../../../lib/actions-history";
+import {
+  getCachedBriefing, saveBriefing, hashBriefingInput, isCacheFresh,
+} from "../../../lib/actions-briefing";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 30;
 
-const BASE_URL = "https://api.smartsheet.com/2.0";
-const REPORT_ID = process.env.ALL_PROJECTS_REPORT_ID || "1172654530711428";
+// -------------------------------------------------------------------------
+// Briefing
+// -------------------------------------------------------------------------
+async function generateBriefing(summary, heads) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
 
-// Ecosystem -> department head. PA rolls into Climate per Paul.
-const DEPT_HEADS = {
-  "Climate": "Kristin O'Connell",
-  "Public Affairs": "Kristin O'Connell",
-  "Real Estate": "Jorge Mendez",
-  "Health": "Christa Segalini",
-  "HOWL": "Paul Newton",
-  "Experiences": "Paul Newton",
-  "Delivery": "Paul Newton",
-  "Performance": "Pola Finkelzon",
-};
+  const byType = summary.by_type || {};
+  const topImpact = heads
+    .reduce((acc, h) => {
+      [...h.live, ...h.pipeline].forEach((p) => acc.push({ head: h.name, ...p }));
+      return acc;
+    }, [])
+    .sort((a, b) => b.total_dollar - a.total_dollar)
+    .slice(0, 5)
+    .map((p) => `- ${p.head}: ${p.rid} ${p.project.client} / ${p.project.project_name} — $${Math.round(p.total_dollar).toLocaleString()}, ${p.triggers.length} trigger(s), oldest ${p.max_days_open}d`);
 
-// Canonical rendering order of dept heads + the ecosystems each covers
-const HEADS = [
-  { name: "Kristin O'Connell", ecosystems: ["Climate", "Public Affairs"] },
-  { name: "Jorge Mendez",      ecosystems: ["Real Estate"] },
-  { name: "Christa Segalini",  ecosystems: ["Health"] },
-  { name: "Paul Newton",       ecosystems: ["HOWL", "Experiences", "Delivery"] },
-  { name: "Pola Finkelzon",    ecosystems: ["Performance"] },
-];
+  const teamLines = heads
+    .filter((h) => h.total > 0)
+    .map((h) => `- ${h.name} (${h.lead}): ${h.total} actions (${h.live_count} live / ${h.pipeline_count} pipeline), $${Math.round(h.total_dollar_impact).toLocaleString()} impact, ${h.aging_count} aging 4w+`);
 
-const DEVIATION_OVER_THRESHOLD = 3500;
-const DEVIATION_UNDER_THRESHOLD = -5000;
-const OVERAGE_PCT_THRESHOLD = 10;
-const STALE_DAYS = 100;
+  const hygieneCount = (byType.no_tracking || 0) + (byType.missing_budget || 0) + (byType.ready_to_close || 0) + (byType.stale_stage || 0);
+  const financialCount = (byType.deviation_over || 0) + (byType.deviation_under || 0) + (byType.overage_pct || 0);
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-async function apiRequest(endpoint) {
-  const token = process.env.SMARTSHEET_API_TOKEN;
-  if (!token) throw new Error("SMARTSHEET_API_TOKEN not set");
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Smartsheet ${res.status}: ${body}`);
-  }
-  return res.json();
-}
+  const prompt = `You are writing the opening paragraph of an executive dashboard section that surfaces week-over-week actions arising from an all-projects review at Antenna Group, an integrated marketing & communications agency.
 
-function reportRowToObject(row, columns) {
-  const obj = {};
-  const cells = row.cells || [];
-  for (let i = 0; i < cells.length && i < columns.length; i++) {
-    obj[columns[i].title] = cells[i].displayValue != null ? cells[i].displayValue : cells[i].value;
-  }
-  return obj;
-}
+CURRENT ACTIONS SNAPSHOT:
+- Total active actions: ${summary.total} (${summary.live} live work, ${summary.pipeline} pipeline)
+- New today: ${summary.new_today} · Oldest open: ${summary.oldest_days_open} days · Aging (4w+): ${summary.aging_count}
+- Financial triggers (deviation over/under, overage): ${financialCount}
+- Data-hygiene triggers (no tracking, missing budget, ready-to-close, stale): ${hygieneCount}
 
-function parseCurrency(val) {
-  if (val == null || val === "" || val === "No Tracking" || val === "-") return 0;
-  const s = String(val).replace(/[$,\s]/g, "");
-  if (s.startsWith("(") && s.endsWith(")")) return -(parseFloat(s.slice(1, -1)) || 0);
-  return parseFloat(s) || 0;
-}
+BY TRIGGER TYPE:
+- Overservicing (deviation +>$3.5K): ${byType.deviation_over || 0}
+- Underservicing (deviation <-$5K): ${byType.deviation_under || 0}
+- Overage >10% of budget: ${byType.overage_pct || 0}
+- Ready to close (100% complete, still open): ${byType.ready_to_close || 0}
+- No time tracking: ${byType.no_tracking || 0}
+- Missing pipeline budget: ${byType.missing_budget || 0}
+- Stale pipeline (>100d in system): ${byType.stale_stage || 0}
 
-function parsePercent(val) {
-  if (val == null || val === "") return null;
-  const s = String(val).replace(/%/g, "").trim();
-  const n = parseFloat(s);
-  if (isNaN(n)) return null;
-  return n > 0 && n < 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10;
-}
+BY TEAM:
+${teamLines.join("\n") || "- None"}
 
-function ragColor(val) {
-  if (!val) return "unknown";
-  const v = String(val).toLowerCase().trim();
-  if (v === "green") return "green";
-  if (v === "yellow") return "yellow";
-  if (v === "red") return "red";
-  if (v === "blue") return "blue";
-  return "unknown";
-}
+TOP-IMPACT PROJECTS:
+${topImpact.join("\n") || "- None"}
 
-function isExplicitNoTracking(val) {
-  if (val == null) return false;
-  const s = String(val).trim().toLowerCase();
-  return s === "no tracking" || s === "n/a";
-}
+Write a single paragraph of no more than 150 words that gives the reader a snapshot of the current state of actions AND the cleanliness of our data (are the hygiene triggers high? low? trending in a bad direction?). Lead with the most important signal. Be specific with numbers. Call out which team has the heaviest load if it's lopsided. If data-hygiene issues are dominant, say that; if it's a financial week, say that. Do not use markdown, bullets, or headers — prose only. Do not restate every number from above; pick the ones that matter. No fluff openings like "This week" or "In summary". CFO / CEO audience.`;
 
-// ---------------------------------------------------------------------------
-// Trigger evaluation
-// ---------------------------------------------------------------------------
-function evaluateTriggers(projects, today) {
-  const triggers = [];
-
-  for (const p of projects) {
-    const isLive = p.rid.startsWith("R") && !p.rid.startsWith("NB");
-    const isNB = p.rid.startsWith("NB");
-    if (!isLive && !isNB) continue;
-
-    if (isLive) {
-      // Deviation overservicing
-      if (p.last_30_deviation > DEVIATION_OVER_THRESHOLD) {
-        triggers.push({
-          id: `${p.rid}:deviation_over`,
-          rid: p.rid,
-          type: "deviation_over",
-          label_amount: p.last_30_deviation,
-          sort_value: Math.abs(p.last_30_deviation),
-          project: p,
-        });
-      }
-      // Deviation underservicing (booked too much in)
-      if (p.last_30_deviation < DEVIATION_UNDER_THRESHOLD) {
-        triggers.push({
-          id: `${p.rid}:deviation_under`,
-          rid: p.rid,
-          type: "deviation_under",
-          label_amount: p.last_30_deviation,
-          sort_value: Math.abs(p.last_30_deviation),
-          project: p,
-        });
-      }
-      // Overage > 10% of budget
-      if (p.budget_forecast > 0 && p.overage > 0) {
-        const pct = (p.overage / p.budget_forecast) * 100;
-        if (pct > OVERAGE_PCT_THRESHOLD) {
-          triggers.push({
-            id: `${p.rid}:overage_pct`,
-            rid: p.rid,
-            type: "overage_pct",
-            label_amount: p.overage,
-            pct_of_budget: Math.round(pct * 10) / 10,
-            sort_value: p.overage,
-            project: p,
-          });
-        }
-      }
-      // 100% complete, needs closing
-      if (p.pct_complete != null && p.pct_complete >= 100) {
-        triggers.push({
-          id: `${p.rid}:ready_to_close`,
-          rid: p.rid,
-          type: "ready_to_close",
-          sort_value: 0,
-          project: p,
-        });
-      }
-      // No time tracking (explicit flag)
-      if (isExplicitNoTracking(p.actuals_raw)) {
-        triggers.push({
-          id: `${p.rid}:no_tracking`,
-          rid: p.rid,
-          type: "no_tracking",
-          sort_value: 0,
-          project: p,
-        });
-      }
-    }
-
-    if (isNB) {
-      // Missing budget forecast
-      if (p.budget_forecast <= 0) {
-        triggers.push({
-          id: `${p.rid}:missing_budget`,
-          rid: p.rid,
-          type: "missing_budget",
-          sort_value: 0,
-          project: p,
-        });
-      }
-      // No tracking (for NB, $0 or blank actuals counts)
-      if (p.actuals <= 0 || isExplicitNoTracking(p.actuals_raw)) {
-        triggers.push({
-          id: `${p.rid}:no_tracking`,
-          rid: p.rid,
-          type: "no_tracking",
-          sort_value: 0,
-          project: p,
-        });
-      }
-      // Stale — row has been in the system more than STALE_DAYS
-      if (p.created_at) {
-        const createdDay = String(p.created_at).split("T")[0];
-        const daysOld = daysBetween(createdDay, today);
-        if (daysOld > STALE_DAYS) {
-          triggers.push({
-            id: `${p.rid}:stale_stage`,
-            rid: p.rid,
-            type: "stale_stage",
-            days_old: daysOld,
-            sort_value: 0,
-            project: p,
-          });
-        }
-      }
-    }
-  }
-
-  return triggers;
-}
-
-// ---------------------------------------------------------------------------
-// Group + shape response
-// ---------------------------------------------------------------------------
-function groupByHead(triggersWithDays) {
-  const byHead = {};
-  for (const h of HEADS) {
-    byHead[h.name] = {
-      name: h.name,
-      ecosystems: h.ecosystems,
-      live: {},     // rid -> { project, triggers: [] }
-      pipeline: {}, // rid -> { project, triggers: [] }
-      live_count: 0,
-      pipeline_count: 0,
-      total: 0,
-      total_dollar_impact: 0,
-    };
-  }
-  const unassigned = {
-    name: "Unassigned",
-    ecosystems: [],
-    live: {}, pipeline: {},
-    live_count: 0, pipeline_count: 0, total: 0, total_dollar_impact: 0,
-  };
-
-  for (const t of triggersWithDays) {
-    const head = DEPT_HEADS[t.project.ecosystem];
-    const bucket = head ? byHead[head] : unassigned;
-    const bin = t.rid.startsWith("NB") ? bucket.pipeline : bucket.live;
-    if (!bin[t.rid]) bin[t.rid] = { project: t.project, triggers: [] };
-    bin[t.rid].triggers.push({
-      id: t.id,
-      type: t.type,
-      label_amount: t.label_amount != null ? t.label_amount : null,
-      pct_of_budget: t.pct_of_budget != null ? t.pct_of_budget : null,
-      days_old: t.days_old != null ? t.days_old : null,
-      first_seen: t.first_seen,
-      days_open: t.days_open,
-      sort_value: t.sort_value || 0,
-    });
-    if (t.rid.startsWith("NB")) bucket.pipeline_count++;
-    else bucket.live_count++;
-    bucket.total++;
-    bucket.total_dollar_impact += Math.abs(t.sort_value || 0);
-  }
-
-  // Convert nested rid-maps to arrays; sort projects by total dollar impact DESC then days_open DESC
-  const projectArr = (m) => {
-    const arr = Object.entries(m).map(([rid, data]) => {
-      const totalDollar = data.triggers.reduce((s, x) => s + Math.abs(x.sort_value || 0), 0);
-      const maxDays = data.triggers.reduce((m, x) => Math.max(m, x.days_open || 0), 0);
-      // Sort triggers within a project: $ ones first desc, hygiene after
-      data.triggers.sort((a, b) => (b.sort_value || 0) - (a.sort_value || 0) || (b.days_open || 0) - (a.days_open || 0));
-      return { rid, ...data, total_dollar: totalDollar, max_days_open: maxDays };
-    });
-    arr.sort((a, b) => b.total_dollar - a.total_dollar || b.max_days_open - a.max_days_open);
-    return arr;
-  };
-
-  const heads = HEADS.map((h) => ({
-    ...byHead[h.name],
-    live: projectArr(byHead[h.name].live),
-    pipeline: projectArr(byHead[h.name].pipeline),
-  }));
-
-  if (unassigned.total > 0) {
-    heads.push({
-      ...unassigned,
-      live: projectArr(unassigned.live),
-      pipeline: projectArr(unassigned.pipeline),
-    });
-  }
-
-  return heads;
-}
-
-// ---------------------------------------------------------------------------
-// GET handler
-// ---------------------------------------------------------------------------
-export async function GET() {
   try {
-    const raw = await apiRequest(`/reports/${REPORT_ID}?pageSize=10000`);
-    const columns = raw.columns || [];
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      console.error("Briefing Anthropic error:", response.status, body);
+      return null;
+    }
+    const result = await response.json();
+    return result.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
+  } catch (err) {
+    console.error("Briefing generation failed:", err.message);
+    return null;
+  }
+}
+
+// -------------------------------------------------------------------------
+// GET
+// -------------------------------------------------------------------------
+export async function GET(request) {
+  try {
+    const url = new URL(request.url);
+    const forceRefresh = url.searchParams.get("refresh") === "1";
     const today = new Date().toISOString().split("T")[0];
 
-    const projects = (raw.rows || []).map((row) => {
-      const item = reportRowToObject(row, columns);
-      const rid = String(item["RID"] || "").trim();
-      if (!rid) return null;
-      return {
-        rid,
-        client: String(item["Client"] || "").trim() || "-",
-        project_name: String(item["Assignment Title"] || "").trim() || "-",
-        ecosystem: String(item["Owning Ecosystem"] || "").trim(),
-        workflow_status: String(item["Workflow Status"] || "").trim(),
-        contract_type: String(item["Contract Type"] || "").trim(),
-        rag: String(item["RAG"] || "").trim(),
-        rag_color: ragColor(item["RAG"]),
-        pm: String(item["PM/PROD Assigned"] || "").trim(),
-        assignment: String(item["Assignment"] || "").trim(),
-        budget_forecast: parseCurrency(item["Budget Forecast"]),
-        actuals_raw: item["Actuals"],
-        actuals: parseCurrency(item["Actuals"]),
-        overage: parseCurrency(item["Overage"]),
-        last_30_deviation: parseCurrency(item["Last 30 Deviation"]),
-        pct_complete: parsePercent(item["% Complete"]),
-        created_at: row.createdAt || null,
-      };
-    }).filter(Boolean);
+    // 1. Pull + evaluate
+    const projects = await fetchProjects();
+    const dedup = projects._dedup || null;
+    const rawTriggers = evaluateTriggers(projects, today);
+    const { kept: triggers, dropped_count: overage_only_dropped } = applyOverageOnlyFilter(rawTriggers);
 
-    // Evaluate
-    const triggers = evaluateTriggers(projects, today);
-
-    // Reconcile against blob history (best-effort — don't fail the whole request
-    // if blob is unavailable; just render with days_open = 0).
-    let updated = {};
+    // 2. Reconcile days-open history
+    let reconciled = {};
     let historyError = null;
     try {
       const history = await getActionsHistory();
-      updated = reconcileActions(triggers.map((t) => t.id), history);
-      await saveActionsHistory(updated);
+      reconciled = reconcileActions(triggers.map((t) => t.id), history);
+      await saveActionsHistory(reconciled);
     } catch (err) {
       historyError = err.message;
-      // Fall back: treat every current trigger as first-seen-today
-      updated = triggers.reduce((acc, t) => {
+      reconciled = triggers.reduce((acc, t) => {
         acc[t.id] = { first_seen: today, last_seen: today };
         return acc;
       }, {});
     }
 
     const triggersWithDays = triggers.map((t) => {
-      const rec = updated[t.id] || { first_seen: today, last_seen: today };
-      return {
-        ...t,
-        first_seen: rec.first_seen,
-        days_open: daysBetween(rec.first_seen, today),
-      };
+      const rec = reconciled[t.id] || { first_seen: today, last_seen: today };
+      return { ...t, first_seen: rec.first_seen, days_open: daysBetween(rec.first_seen, today) };
     });
 
-    // Group and summarize
-    const heads = groupByHead(triggersWithDays);
+    // 3. Group into team panels
+    const heads = groupByTeam(triggersWithDays);
 
-    const by_type = triggersWithDays.reduce((acc, t) => {
-      acc[t.type] = (acc[t.type] || 0) + 1;
-      return acc;
-    }, {});
-
+    // 4. Build summary
+    const by_type = triggersWithDays.reduce((acc, t) => { acc[t.type] = (acc[t.type] || 0) + 1; return acc; }, {});
+    const aging_count = triggersWithDays.filter((t) => (t.days_open || 0) >= AGING_ACTION_DAYS).length;
     const summary = {
       total: triggersWithDays.length,
       live: triggersWithDays.filter((t) => !t.rid.startsWith("NB")).length,
@@ -382,12 +150,60 @@ export async function GET() {
       by_type,
       new_today: triggersWithDays.filter((t) => t.days_open === 0).length,
       oldest_days_open: triggersWithDays.reduce((m, t) => Math.max(m, t.days_open || 0), 0),
+      aging_count,
+      aging_threshold_days: AGING_ACTION_DAYS,
+      overage_only_dropped,
+      dedup: dedup ? {
+        raw_rows: dedup.raw_count,
+        unique_rids: dedup.deduped_count,
+        duplicate_count: dedup.duplicate_rids.length,
+        duplicate_rids: dedup.duplicate_rids.slice(0, 20), // cap for response size
+      } : null,
     };
+
+    // 5. Briefing (cached)
+    let briefing = null;
+    let briefing_generated_at = null;
+    const briefingInput = {
+      total: summary.total,
+      by_type: summary.by_type,
+      aging_count,
+      team_totals: heads.map((h) => ({ n: h.name, t: h.total, $: Math.round(h.total_dollar_impact), a: h.aging_count })),
+    };
+    const dataHash = hashBriefingInput(briefingInput);
+
+    if (summary.total > 0) {
+      const cached = await getCachedBriefing();
+      if (!forceRefresh && isCacheFresh(cached, dataHash)) {
+        briefing = cached.briefing;
+        briefing_generated_at = cached.generated_at;
+      } else {
+        const fresh = await generateBriefing(summary, heads);
+        if (fresh) {
+          try {
+            const saved = await saveBriefing(fresh, dataHash);
+            briefing = saved.briefing;
+            briefing_generated_at = saved.generated_at;
+          } catch (err) {
+            // Even if caching fails, serve the fresh briefing for this request
+            briefing = fresh;
+            briefing_generated_at = new Date().toISOString();
+          }
+        } else if (cached && cached.briefing) {
+          // AI unavailable — fall back to stale cache rather than show nothing
+          briefing = cached.briefing;
+          briefing_generated_at = cached.generated_at;
+        }
+      }
+    }
 
     return Response.json(
       {
         summary,
         heads,
+        briefing,
+        briefing_generated_at,
+        report_url: REPORT_URL,
         generated_at: new Date().toISOString(),
         history_error: historyError,
       },
