@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Antenna Group Brand — Warm Cream Editorial
 // ---------------------------------------------------------------------------
-const APP_VERSION = "1.15.10";
+const APP_VERSION = "1.15.12";
 const T = {
   bg: "#f2ece3", bgCard: "#ffffff", bgCardAlt: "#faf7f2", bgHover: "#f5f0e8",
   border: "#e0dbd2", borderDark: "#c8c2b8",
@@ -1517,10 +1517,14 @@ export default function Dashboard() {
           const agingThreshold = summary.aging_threshold_days || 28;
 
           // ----- trigger metadata (labels + colors) -----
+          // Label rationale: "Budget overage" vs "Overservicing" — they sound
+          // similar but mean different things. Overage is FTC (forecast-to-
+          // complete) budget overrun. Overservicing is 30-day time deviation
+          // (team logged more time than was booked).
           const TRIGGER_META = {
             deviation_over:  { label: "Overservicing",    color: T.red,       bg: "#ffebee" },
             deviation_under: { label: "Underservicing",   color: T.blue,      bg: "#e3f2fd" },
-            overage_pct:     { label: "Overage",          color: T.red,       bg: "#ffebee" },
+            overage_pct:     { label: "Budget overage",   color: T.red,       bg: "#ffebee" },
             ready_to_close:  { label: "Ready to close",   color: T.textMuted, bg: "#f5f5f5" },
             no_tracking:    { label: "No time tracking",  color: T.orange,    bg: "#fff3e0" },
             missing_budget:  { label: "Missing budget",   color: T.orange,    bg: "#fff3e0" },
@@ -1530,7 +1534,7 @@ export default function Dashboard() {
           function triggerDetail(t) {
             if (t.type === "deviation_over")  return `+${fmtK(t.label_amount)} · last 30d`;
             if (t.type === "deviation_under") return `${fmtK(t.label_amount)} · last 30d`;
-            if (t.type === "overage_pct")     return `${t.pct_of_budget}% · ${fmtK(t.label_amount)}`;
+            if (t.type === "overage_pct")     return `${fmtK(t.label_amount)} · ${t.pct_of_budget}% of budget`;
             if (t.type === "stale_stage")     return `${t.days_old}d in system`;
             return null;
           }
@@ -1666,7 +1670,7 @@ export default function Dashboard() {
               </div>
               <a href={actionsData.report_url || "#"} target="_blank" rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.text, color: T.bg, padding: "7px 14px", borderRadius: 6, textDecoration: "none", fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>
-                Open All Projects sheet →
+                Open All Projects Report In SS →
               </a>
             </div>
 
